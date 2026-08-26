@@ -377,7 +377,15 @@
   .heading-code-btn + .heading-pin-btn{margin-left:0;}
   .heading-code-btn:hover{background:var(--card-hover);border-color:var(--hairline);color:var(--amber);}
   .heading-code-btn-plus{position:absolute;right:1px;bottom:1px;background:var(--card);border-radius:50%;}
+  .heading-release-btn{
+    flex:0 0 auto;
+    width:26px;height:26px;border-radius:6px;border:1px solid transparent;
+    background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease;
+  }
+  .heading-release-btn:hover{background:var(--card-hover);border-color:var(--hairline);color:var(--teal);}
   .day-heading.collapsed .heading-code-btn{display:none;}
+  .day-heading.collapsed .heading-release-btn{display:none;}
   .day-heading.collapsed .heading-pin-btn{display:none;}
   /* Presale's artist sub-heading is a narrow, indented row (unlike a
      regular sheet's full-width artist heading), so pushing its icons
@@ -386,7 +394,7 @@
      entire remaining list width, disconnected from the name they
      belong to. Keeping them right next to the name here instead;
      regular headings elsewhere are untouched. */
-  .artist-subheading .heading-code-btn, .artist-subheading .heading-pin-btn{margin-left:6px;}
+  .artist-subheading .heading-code-btn, .artist-subheading .heading-pin-btn, .artist-subheading .heading-release-btn{margin-left:6px;}
   .bulk-open-links{margin-left:auto;flex:0 0 auto;display:flex;gap:6px;}
   .bulk-open-btn{
     font-family:'Inter',sans-serif;font-size:11px;font-weight:600;
@@ -1634,6 +1642,7 @@
           <button class="menu-row-btn" id="markSeenBtn" title="Clear the NEW badge from every event on this sheet">✓ Mark all seen</button>
           <button class="menu-row-btn" id="clearPastBtn" title="Remove events dated before today">🗑 Clear past</button>
           <button class="menu-row-btn" id="clearBtn" style="display:none;">🗑 Clear data</button>
+          <button class="menu-row-btn" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
           <button class="menu-row-btn" id="viewHistoryBtn" title="Browse snapshots saved from past Clear-data actions — kept out of daily use, only shown when you open it">📜 View history</button>
           <button class="menu-row-btn" id="adminModeBtn" title="Unlocks delete, clear, and permanent-removal actions. Everyday edits (notes, star, pin, codes, prices) never need this.">🔒 Admin mode</button>
           <div class="menu-row-divider"></div>
@@ -1784,6 +1793,7 @@ const $ = sel => document.querySelector(sel);
 const fileInput = $('#fileInput');
 const uploadBtn = $('#uploadBtn');
 const clearBtn = $('#clearBtn');
+const releaseAllPresaleBtn = $('#releaseAllPresaleBtn');
 const dropZone = $('#dropZone');
 const emptyState = $('#emptyState');
 const listRoot = $('#listRoot');
@@ -3359,7 +3369,16 @@ function recordsFromCSV(text){
   // normal event record rather than requiring a different code path.
   const presaleDateIdx = detect(['presale date', 'presale date/time', 'presale date time', 'presale date/time (est)', 'presale date time (est)']);
   const codeIdx = detect(['code', 'presale code']);
+  // A second, separate code column — some trackers (see the "Other
+  // Codes"/"Codes" pattern in a presale tracker sheet) log a backup or
+  // alternate code alongside the primary one. Claimed as its own column
+  // (not folded into codeIdx's own alias list) specifically so it
+  // doesn't win the primary Code column's slot when both exist — its
+  // value gets appended onto the main code instead, comma-separated,
+  // during merge below.
+  const otherCodeIdx = detect(['other codes', 'other code', 'backup code', 'alternate code']);
   const whatToGoForIdx = detect(['what to go for', 'notes', 'note']);
+  const riskIdx = detect(['risk']);
   const publicSaleIdx = detect(['public sale date', 'public sale date/time', 'public sale date time', 'public sale date/time (est)', 'public sale date time (est)']);
 
   // Last resort when NO header wording matched at all — scan actual cell
@@ -3452,9 +3471,12 @@ function recordsFromCSV(text){
       presaleDateObj: presaleDateObj ? presaleDateObj.toISOString() : null,
       code: codeIdx !== -1 ? row[codeIdx] : '',
       publicSaleDateStr: publicSaleIdx !== -1 ? row[publicSaleIdx] : '',
-      // Transient — read once by handleCsvUpload to seed the note, then
-      // discarded. Not a permanent field on the event record.
-      whatToGoFor: whatToGoForIdx !== -1 ? row[whatToGoForIdx] : ''
+      // Transient — read once by handleCsvUpload to seed the note or
+      // append to the code, then discarded. Not a permanent field on
+      // the event record.
+      whatToGoFor: whatToGoForIdx !== -1 ? row[whatToGoForIdx] : '',
+      otherCode: otherCodeIdx !== -1 ? row[otherCodeIdx] : '',
+      risk: riskIdx !== -1 ? row[riskIdx] : ''
     });
   });
 
@@ -3740,13 +3762,30 @@ async function handleCsvUpload(file, text){
   // "What to go for" columns (seen in presale trackers) seed the note on
   // first import — that's exactly the kind of thing that belongs in
   // notes. Only fills in an empty note, so re-uploading never clobbers
-  // something you've since written yourself.
+  // something you've since written yourself. "Risk" gets folded in the
+  // same way, as its own line, since it's the same kind of "worth
+  // remembering about this one" context. A separate "Other Codes"
+  // column appends onto the primary code (comma-separated, skipping an
+  // exact duplicate) rather than overwriting it, since the point of a
+  // second code column is usually "also try this one," not "replace the
+  // first."
   records.forEach(r => {
-    if(r.whatToGoFor && r.whatToGoFor.trim()){
+    const noteParts = [];
+    if(r.whatToGoFor && r.whatToGoFor.trim()) noteParts.push(r.whatToGoFor.trim());
+    if(r.risk && r.risk.trim()) noteParts.push('Risk: ' + r.risk.trim());
+    if(noteParts.length){
       const ann = getAnnotation(eventKey(r));
-      if(!ann.note || !ann.note.trim()) ann.note = r.whatToGoFor.trim();
+      if(!ann.note || !ann.note.trim()) ann.note = noteParts.join('\n');
+    }
+    if(r.otherCode && r.otherCode.trim()){
+      const existing = (r.code || '').split(',').map(c => c.trim()).filter(Boolean);
+      const extra = r.otherCode.trim();
+      if(!existing.some(c => c.toLowerCase() === extra.toLowerCase())) existing.push(extra);
+      r.code = existing.join(', ');
     }
     delete r.whatToGoFor;
+    delete r.risk;
+    delete r.otherCode;
   });
   const merged = mergeEvents(allEvents, records);
   merged.forEach(ev => {
@@ -3824,18 +3863,56 @@ async function deleteSingleEvent(key){
 // artist comes up (a new show, a search, anything), its code and notes
 // are still sitting right there under "Past," not lost the moment the
 // card itself disappeared.
-async function releaseFromPresale(key){
-  const inActive = allEvents.find(e => eventKey(e) === key);
-  if(!inActive) return;
+// Where a batch of released presale shows should land — the whole point
+// is that they keep being normal, editable cards afterward (not parked
+// in a read-only archive), so this always needs a real 'standard' sheet
+// to move them into.
+function pickReleaseDestinationSheet(){
+  const standardSheets = sheets.filter(s => s.mode === 'standard');
+  if(!standardSheets.length){
+    alert("No regular sheet exists to move these into yet — create one first (the + next to your sheet tabs), then try again.");
+    return null;
+  }
+  if(standardSheets.length === 1) return standardSheets[0].name;
+  const names = standardSheets.map(s => s.name);
+  const chosen = prompt(`Move to which sheet?\n${names.join('\n')}`, names[0]);
+  if(chosen === null) return null;
+  const match = standardSheets.find(s => s.name.toLowerCase() === chosen.trim().toLowerCase());
+  if(!match){ alert('No sheet with that exact name — try again.'); return null; }
+  return match.name;
+}
+
+// The actual move — one function backing every release trigger (a
+// single card, a whole hour, a whole artist, or the entire presale
+// sheet), so they all behave identically. Every show's code, notes,
+// prices, and price history come along untouched; only isNew/archived
+// reset, since neither should carry meaning on a card that's about to
+// look like any other normal card on the destination sheet. Existing
+// duplicates on the destination (same event key already there somehow)
+// are skipped rather than doubled up.
+async function moveEventsFromPresaleToStandard(keys, destSheetNameOverride){
+  if(!keys.length) return;
+  const destSheetName = destSheetNameOverride || pickReleaseDestinationSheet();
+  if(!destSheetName) return;
   pushUndo();
-  const ann = getAnnotation(key);
-  const releasedEvent = { ...inActive, note: ann.note || '', rating: ann.rating || 0, pinned: false, sections: ann.sections || [], isNew: false, archived: false, noteHistory: ann.noteHistory || [], priceHistory: ann.priceHistory || [], extraLinks: ann.extraLinks || [], deletedAt: new Date().toISOString(), deletedFromSheet: activeSheetName };
-  allEvents = allEvents.filter(e => eventKey(e) !== key);
-  delete annotations[key];
-  if(openNotesKey === key){ openNotesKey = null; noteSnapshotOnOpen = null; }
+  const toMove = [];
+  keys.forEach(key => {
+    const ev = allEvents.find(e => eventKey(e) === key);
+    if(!ev) return;
+    const ann = getAnnotation(key);
+    toMove.push({ ...ev, note: ann.note || '', rating: ann.rating || 0, pinned: ann.pinned || false, sections: ann.sections || [], isNew: false, archived: false, noteHistory: ann.noteHistory || [], priceHistory: ann.priceHistory || [], extraLinks: ann.extraLinks || [] });
+  });
+  if(!toMove.length) return;
+  const movedKeys = new Set(toMove.map(eventKey));
+  allEvents = allEvents.filter(e => !movedKeys.has(eventKey(e)));
+  movedKeys.forEach(k => delete annotations[k]);
+  if(openNotesKey && movedKeys.has(openNotesKey)){ openNotesKey = null; noteSnapshotOnOpen = null; }
   render();
   await pushActiveSheetToRemote();
-  await archiveSheetSnapshot(activeSheetName, [releasedEvent]);
+  const destExisting = remoteCache.filter(r => r.appSheet === destSheetName);
+  const destExistingKeys = new Set(destExisting.map(eventKey));
+  const toAppend = toMove.filter(e => !destExistingKeys.has(eventKey(e)));
+  await pushSheetEvents(destSheetName, 'standard', [...destExisting, ...toAppend]);
 }
 
 // Puts a trashed event back on whatever sheet it came from, with its
@@ -4603,6 +4680,7 @@ function renderPresale(){
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
   clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
+  releaseAllPresaleBtn.style.display = hasData ? 'block' : 'none';
 
   if(!hasData){
     listRoot.innerHTML = '';
@@ -4697,7 +4775,12 @@ function renderPresale(){
     if(g.showHeading){
       const pinKeys = (sortMode === 'name' || sortMode === 'venue') ? g.events.map(eventKey) : null;
       const bulkCodeKeys = sortMode === 'name' ? pinKeys : null;
-      html += dayHeadingHtml(g.heading, isToday ? '<span class="tag-today">Today</span>' : '', pinKeys, null, isHourBand ? 'hour-heading' : '', bulkCodeKeys);
+      // Every hour-band heading gets a release-this-hour button
+      // regardless of sort mode — unlike bulk-code (only makes sense
+      // grouping by artist), releasing "everything dropping at 10am" is
+      // a meaningful action no matter how the list is currently sorted.
+      const bulkReleaseKeys = g.events.map(eventKey);
+      html += dayHeadingHtml(g.heading, isToday ? '<span class="tag-today">Today</span>' : '', pinKeys, null, isHourBand ? 'hour-heading' : '', bulkCodeKeys, bulkReleaseKeys);
     }
     if(sortMode === 'date'){
       // Within a single presale-time (or show-date-fallback) bucket,
@@ -4713,7 +4796,7 @@ function renderPresale(){
       // heading at the same level.
       groupByName(g.events).forEach(nameGroup => {
         if(nameGroup.showHeading){
-          html += dayHeadingHtml(nameGroup.heading, '', nameGroup.events.map(eventKey), g.heading + ' :: ' + nameGroup.heading, 'artist-subheading', nameGroup.events.map(eventKey));
+          html += dayHeadingHtml(nameGroup.heading, '', nameGroup.events.map(eventKey), g.heading + ' :: ' + nameGroup.heading, 'artist-subheading', nameGroup.events.map(eventKey), nameGroup.events.map(eventKey));
         }
         html += `<div class="day-grid" ${colStyle}>${nameGroup.events.map(cardHtmlPresale).join('')}</div>`;
       });
@@ -4921,6 +5004,7 @@ function renderStandard(){
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
   clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
+  releaseAllPresaleBtn.style.display = 'none';
 
   if(!hasData){
     listRoot.innerHTML = '';
@@ -5888,7 +5972,7 @@ function notesPanelHtml(key, ann, ev, showPresaleFields = false){
       </div>
       ${linksHtml}
       <div class="panel-action-row">
-        ${(showPresaleFields && adminModeOn) ? `<button type="button" class="panel-release-btn" data-action="release-presale" data-key="${escapeHtml(key)}" title="Take this off the active presale list, but keep its code and notes permanently searchable under this artist">📜 Release</button>` : ''}
+        ${showPresaleFields ? `<button type="button" class="panel-release-btn" data-action="release-presale" data-key="${escapeHtml(key)}" title="Move this off the active presale list and onto a regular sheet — its code, notes, and prices all come with it">↗ Release</button>` : ''}
         <button type="button" class="panel-archive-btn" data-action="archive" data-key="${escapeHtml(key)}">${ann.archived ? '📤 Unarchive' : '📦 Archive'}</button>
         ${adminModeOn ? `<button type="button" class="panel-delete-btn" data-action="delete" data-key="${escapeHtml(key)}">🗑 Delete</button>` : ''}
       </div>
@@ -6224,6 +6308,7 @@ function renderUsOpen(){
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
   clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
+  releaseAllPresaleBtn.style.display = 'none';
 
   if(!hasData){
     listRoot.innerHTML = '';
@@ -6294,6 +6379,7 @@ function renderBroadway(){
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
   clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
+  releaseAllPresaleBtn.style.display = 'none';
 
   if(!hasData){
     listRoot.innerHTML = '';
@@ -6385,7 +6471,7 @@ function renderBroadway(){
 // very next .day-grid via an adjacent-sibling rule. The section key is
 // just the heading text — unique within a given render in every case
 // this app produces one.
-function dayHeadingHtml(label, extraHtml = '', pinKeys = null, sectionKeyOverride = null, extraClass = '', bulkCodeKeys = null){
+function dayHeadingHtml(label, extraHtml = '', pinKeys = null, sectionKeyOverride = null, extraClass = '', bulkCodeKeys = null, bulkReleaseKeys = null){
   const key = sectionKeyOverride || label;
   const collapsed = collapsedSections.has(key);
   let pinBtn = '';
@@ -6419,9 +6505,21 @@ function dayHeadingHtml(label, extraHtml = '', pinKeys = null, sectionKeyOverrid
       <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" class="heading-code-btn-plus"><path d="M12 5v14M5 12h14"/></svg>
     </button>`;
   }
+  // Bulk release — the whole point of a presale sheet is that it churns
+  // every day, so working it down by clicking "Release" on each card
+  // one at a time doesn't scale. This clears every show under an hour
+  // heading or an artist heading in one action instead, asking once
+  // (via moveEventsFromPresaleToStandard) which sheet they should land
+  // on rather than once per card.
+  let bulkReleaseBtn = '';
+  if(bulkReleaseKeys && bulkReleaseKeys.length){
+    bulkReleaseBtn = `<button type="button" class="icon-btn heading-release-btn" data-action="bulk-release-presale" data-keys="${escapeHtml(JSON.stringify(bulkReleaseKeys))}" title="Move every show in this group off presale and onto a regular sheet at once">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>
+    </button>`;
+  }
   return `<div class="day-heading collapsible-heading ${extraClass} ${collapsed ? 'collapsed' : ''}" data-section="${escapeHtml(key)}">
     <svg class="collapse-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
-    <span class="heading-label">${escapeHtml(label)}</span>${extraHtml}${bulkCodeBtn}${pinBtn}
+    <span class="heading-label">${escapeHtml(label)}</span>${extraHtml}${bulkCodeBtn}${bulkReleaseBtn}${pinBtn}
   </div>`;
 }
 
@@ -6451,6 +6549,15 @@ clearBtn.addEventListener('click', () => {
   if(!adminModeOn){ alert('Clearing requires admin mode — unlock it from the "..." menu.'); return; }
   clearActiveSheetEvents();
   moreMenuPopover.classList.remove('open');
+});
+
+releaseAllPresaleBtn.addEventListener('click', () => {
+  moreMenuPopover.classList.remove('open');
+  if(!allEvents.length) return;
+  const keys = allEvents.map(eventKey);
+  if(confirm(`Move all ${keys.length} shows off this presale sheet and onto a regular sheet? Their codes, notes, and prices all come with them.`)){
+    moveEventsFromPresaleToStandard(keys);
+  }
 });
 
 let searchRenderTimer = null;
@@ -6608,6 +6715,20 @@ listRoot.addEventListener('click', async e => {
     return;
   }
 
+  // Bulk-release — same underlying move as a single card's Release
+  // button, just handed a whole group's worth of keys at once. One
+  // confirm covers the whole batch rather than one per card.
+  const bulkReleaseBtn = e.target.closest('[data-action="bulk-release-presale"]');
+  if(bulkReleaseBtn){
+    let keys = [];
+    try { keys = JSON.parse(bulkReleaseBtn.dataset.keys || '[]'); } catch(err) { keys = []; }
+    if(!keys.length) return;
+    if(confirm(`Move all ${keys.length} shows in this group off presale and onto a regular sheet? Their codes, notes, and prices all come with them.`)){
+      moveEventsFromPresaleToStandard(keys);
+    }
+    return;
+  }
+
   // Checked before the heading-collapse toggle for the same reason as
   // the pin-group button above — this lives inside the heading too.
   const bulkOpenBtn = e.target.closest('[data-action="bulk-open"]');
@@ -6756,12 +6877,13 @@ listRoot.addEventListener('click', async e => {
     return;
   }
 
+  // Release isn't admin-gated like Delete/Clear — nothing is discarded
+  // here, it's a move to another active sheet, same spirit as Archive.
+  // This is meant to be an easy, everyday action given how often a
+  // presale list needs to be worked down as it changes day to day.
   const releaseBtn = e.target.closest('[data-action="release-presale"]');
   if(releaseBtn){
-    if(!adminModeOn){ alert('Releasing requires admin mode — unlock it from the "..." menu.'); return; }
-    if(confirm('Release this from the active presale list? Its code and notes stay searchable under this artist in History, but it comes off this sheet for good.')){
-      releaseFromPresale(releaseBtn.dataset.key);
-    }
+    moveEventsFromPresaleToStandard([releaseBtn.dataset.key]);
     return;
   }
 
