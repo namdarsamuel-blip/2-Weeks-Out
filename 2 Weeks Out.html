@@ -107,6 +107,12 @@
     font-family:'IBM Plex Mono',monospace;
     font-size:12px;color:var(--muted);letter-spacing:0;
   }
+  .admin-badge{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;
+    color:var(--coral);background:rgba(255,107,106,.12);border:1px solid rgba(255,107,106,.35);
+    border-radius:5px;padding:2px 7px;letter-spacing:.04em;vertical-align:middle;
+  }
+  .menu-row-btn.active{color:var(--coral);}
   .meta-line{
     font-family:'IBM Plex Mono',monospace;
     font-size:10.5px;color:var(--muted);
@@ -389,6 +395,25 @@
     cursor:pointer;transition:border-color .15s ease,color .15s ease,background .15s ease;
   }
   .bulk-open-btn:hover{border-color:var(--teal);color:var(--teal);background:rgba(79,200,191,.06);}
+  /* Fixed to the viewport, not the scrolling <main> — bottom-right,
+     clear of the bulk-open toast (which is centered) so both can be
+     visible at once without overlapping. */
+  .back-to-top-btn{
+    position:fixed;right:24px;bottom:24px;z-index:150;
+    width:44px;height:44px;border-radius:50%;
+    background:var(--card);border:1px solid var(--hairline);
+    color:var(--text);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 8px 20px rgba(0,0,0,.4);
+    transition:background .15s ease,border-color .15s ease,transform .15s ease,opacity .15s ease;
+    opacity:0;pointer-events:none;
+  }
+  .back-to-top-btn.visible{opacity:1;pointer-events:auto;}
+  .back-to-top-btn:hover{background:var(--card-hover);border-color:var(--teal);color:var(--teal);transform:translateY(-2px);}
+  .back-to-top-btn:active{transform:translateY(0);}
+  @media (max-width:560px){
+    .back-to-top-btn{right:16px;bottom:16px;width:40px;height:40px;}
+  }
   /* Floating control for opening links one at a time — sits above
      everything, stays fixed to the viewport (not the scrolling list) so
      it's reachable no matter how far down the page you've scrolled
@@ -451,6 +476,17 @@
   .ticket.shift-day{border-left-color:var(--day-color);background:var(--day-bg);}
   .ticket.shift-night{border-left-color:var(--night-color);background:var(--night-bg);}
   .ticket.is-pinned{border-color:var(--pin);border-left-color:var(--pin);}
+  /* A star needs to read as clearly different from a pin at a glance —
+     both happen to use the same gold accent color, so a border alone
+     (pin's whole treatment) wouldn't be enough to tell them apart. The
+     gradient wash across the card is what makes starred cards actually
+     jump out, rather than needing to spot a small icon in the corner. */
+  .ticket.is-starred{
+    border-color:var(--amber);
+    background:linear-gradient(135deg, rgba(242,193,78,.14), rgba(242,193,78,.02) 55%);
+    box-shadow:0 0 0 1px rgba(242,193,78,.35), 0 4px 18px rgba(242,193,78,.16);
+  }
+  .ticket.is-starred:hover{box-shadow:0 0 0 1px rgba(242,193,78,.5), 0 4px 18px rgba(242,193,78,.22);}
   .ticket.is-selected, .shift-block.is-selected{outline:2px solid var(--teal);outline-offset:-1px;background:rgba(79,200,191,.06);}
   .select-check{
     position:absolute;top:10px;left:10px;z-index:5;
@@ -545,6 +581,10 @@
   .shift-block.shift-day{border-left-color:var(--day-color);background:var(--day-bg);}
   .shift-block.shift-night{border-left-color:var(--night-color);background:var(--night-bg);}
   .shift-block.is-pinned{box-shadow:inset 0 0 0 1px var(--pin);}
+  .shift-block.is-starred{
+    background:linear-gradient(135deg, rgba(242,193,78,.14), rgba(242,193,78,.02) 55%);
+    box-shadow:inset 0 0 0 1px var(--amber), 0 4px 18px rgba(242,193,78,.16);
+  }
   .shift-block-toolbar{position:absolute;top:8px;right:10px;z-index:2;}
   .shift-block.shift-day .ev-time{color:var(--day-color);}
   .shift-block.shift-night .ev-time{color:var(--night-color);}
@@ -1123,6 +1163,14 @@
      Full width here means every number gets a comfortable tap target,
      and both result boxes below end up the same height as each other
      since neither one has anything else stacked inside it anymore. */
+  .calculator-cad-toggle{
+    display:flex;align-items:center;gap:6px;margin-top:10px;
+    font-size:11.5px;color:var(--muted);cursor:pointer;user-select:none;
+  }
+  .calculator-cad-toggle input{cursor:pointer;}
+  .calculator-cad-toggle.is-checked{color:var(--tm-blue);font-weight:600;}
+  .calculator-rate-status{font-size:10.5px;color:var(--muted);margin-top:5px;min-height:13px;}
+  .calculator-rate-status.is-error{color:var(--coral);}
   .calculator-divisor-caption{font-size:11.5px;color:var(--muted);margin:14px 0 8px;text-align:center;}
   .calculator-divisor-grid{
     display:grid;grid-template-columns:repeat(5, 1fr);gap:6px;
@@ -1536,7 +1584,7 @@
   <div class="header-inner">
     <div class="title-block">
       <p class="eyebrow" id="eyebrowLabel">Ticket Watch</p>
-      <h1>Ticket Watch <span class="count" id="countLabel"></span></h1>
+      <h1>Ticket Watch <span class="count" id="countLabel"></span> <span class="admin-badge" id="adminBadge" style="display:none;">🔓 ADMIN</span></h1>
     </div>
     <div class="toolbar">
       <div class="search-wrap">
@@ -1587,6 +1635,7 @@
           <button class="menu-row-btn" id="clearPastBtn" title="Remove events dated before today">🗑 Clear past</button>
           <button class="menu-row-btn" id="clearBtn" style="display:none;">🗑 Clear data</button>
           <button class="menu-row-btn" id="viewHistoryBtn" title="Browse snapshots saved from past Clear-data actions — kept out of daily use, only shown when you open it">📜 View history</button>
+          <button class="menu-row-btn" id="adminModeBtn" title="Unlocks delete, clear, and permanent-removal actions. Everyday edits (notes, star, pin, codes, prices) never need this.">🔒 Admin mode</button>
           <div class="menu-row-divider"></div>
           <p class="notes-label">Keyboard shortcuts</p>
           <div class="shortcuts-list">
@@ -1597,7 +1646,7 @@
             <div><kbd>n</kbd> Open / close notes</div>
             <div><kbd>Enter</kbd> Open ticket link</div>
             <div><kbd>c</kbd> Copy ticket link</div>
-            <div><kbd>Delete</kbd> or <kbd>x</kbd> Delete card</div>
+            <div id="deleteShortcutRow"><kbd>Delete</kbd> or <kbd>x</kbd> Delete card</div>
             <div><kbd>Ctrl</kbd>+<kbd>Z</kbd> Undo</div>
             <div><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> Redo</div>
             <div><kbd>Esc</kbd> Close panel / unfocus</div>
@@ -1655,6 +1704,9 @@
   </div>
 </div>
 
+<button type="button" class="back-to-top-btn" id="backToTopBtn" title="Back to top" aria-label="Back to top">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
 <div class="bulk-open-toast" id="bulkOpenToast" style="display:none;"></div>
 <div class="modal-overlay" id="deletePasscodeModal" style="display:none;">
   <div class="modal-box">
@@ -1682,13 +1734,18 @@
       <div class="calculator-columns">
         <div class="calculator-col calculator-col-vivid">
           <p class="notes-label calculator-label-vivid">VividSeats</p>
-          <p class="calculator-desc">A value, × 0.74</p>
-          <input type="number" step="any" class="calculator-input" id="calcVividInput" placeholder="Enter a value">
+          <p class="calculator-desc">A value, × 0.74 — always USD</p>
+          <input type="text" inputmode="decimal" class="calculator-input" id="calcVividInput" placeholder="e.g. $974.00, 974.00, or 974">
         </div>
         <div class="calculator-col calculator-col-tm">
           <p class="notes-label calculator-label-tm">Ticketmaster</p>
           <p class="calculator-desc">Final price, ÷ a number below</p>
-          <input type="number" step="any" class="calculator-input" id="calcTmPriceInput" placeholder="Final price">
+          <input type="text" inputmode="decimal" class="calculator-input" id="calcTmPriceInput" placeholder="e.g. $974.00 or CA $157.60">
+          <label class="calculator-cad-toggle">
+            <input type="checkbox" id="calcTmCadToggle">
+            🇨🇦 This is in CAD — convert to USD
+          </label>
+          <div class="calculator-rate-status" id="calcRateStatus"></div>
         </div>
       </div>
       <p class="calculator-divisor-caption">Split Ticketmaster price across how many seats</p>
@@ -1764,6 +1821,19 @@ const newSheetNameInput = $('#newSheetNameInput');
 const cancelAddSheetBtn = $('#cancelAddSheetBtn');
 const confirmAddSheetBtn = $('#confirmAddSheetBtn');
 const bulkOpenToast = $('#bulkOpenToast');
+const backToTopBtn = $('#backToTopBtn');
+const mainEl = $('#main');
+// Shows once you've scrolled far enough down that "just scroll up
+// manually" stops being the fastest option — 400px is roughly "you've
+// moved past the first screenful," which is about where that stops
+// being convenient on a long list. Listener is passive since it only
+// ever reads scrollTop, never blocks the actual scroll.
+mainEl.addEventListener('scroll', () => {
+  backToTopBtn.classList.toggle('visible', mainEl.scrollTop > 400);
+}, { passive: true });
+backToTopBtn.addEventListener('click', () => {
+  mainEl.scrollTo({ top: 0, behavior: 'smooth' });
+});
 const deletePasscodeModal = $('#deletePasscodeModal');
 const deletePasscodeInput = $('#deletePasscodeInput');
 const deletePasscodeLabel = $('#deletePasscodeLabel');
@@ -1777,6 +1847,38 @@ const closeInsightsBtn = $('#closeInsightsBtn');
 const historyModal = $('#historyModal');
 const historyBody = $('#historyBody');
 const viewHistoryBtn = $('#viewHistoryBtn');
+const adminModeBtn = $('#adminModeBtn');
+const adminBadge = $('#adminBadge');
+function updateAdminModeUI(){
+  adminBadge.style.display = adminModeOn ? 'inline' : 'none';
+  adminModeBtn.textContent = adminModeOn ? '🔓 Admin mode (on) — click to lock' : '🔒 Admin mode';
+  adminModeBtn.classList.toggle('active', adminModeOn);
+  clearPastBtn.style.display = adminModeOn ? 'block' : 'none';
+  // Showing "Delete or x → Delete card" in the shortcuts list to
+  // someone who can't actually use it (they'd just get the "requires
+  // admin mode" alert) is misleading — it should only be listed when
+  // it's genuinely available.
+  const deleteShortcutRow = $('#deleteShortcutRow');
+  if(deleteShortcutRow) deleteShortcutRow.style.display = adminModeOn ? 'block' : 'none';
+}
+adminModeBtn.addEventListener('click', () => {
+  moreMenuPopover.classList.remove('open');
+  if(adminModeOn){
+    adminModeOn = false;
+    updateAdminModeUI();
+    render();
+    return;
+  }
+  const entered = prompt('Enter the admin passcode to unlock delete, clear, and permanent-removal actions:');
+  if(entered === null) return;
+  if(entered.trim() === ADMIN_PASSCODE){
+    adminModeOn = true;
+    updateAdminModeUI();
+    render();
+  } else {
+    alert('Incorrect passcode.');
+  }
+});
 const calculatorModal = $('#calculatorModal');
 const openCalculatorDirectBtn = $('#openCalculatorDirectBtn');
 const calcResetBtn = $('#calcResetBtn');
@@ -1784,6 +1886,8 @@ const closeCalculatorBtn = $('#closeCalculatorBtn');
 const calcVividInput = $('#calcVividInput');
 const calcVividResult = $('#calcVividResult');
 const calcTmPriceInput = $('#calcTmPriceInput');
+const calcTmCadToggle = $('#calcTmCadToggle');
+const calcRateStatus = $('#calcRateStatus');
 const calcTmDivisorGrid = $('#calcTmDivisorGrid');
 const calcTmResult = $('#calcTmResult');
 const calcCompare = $('#calcCompare');
@@ -1796,15 +1900,69 @@ const calcCompare = $('#calcCompare');
 // number this way is one click instead of typing-then-tabbing-away, and
 // the currently-picked one stays visibly highlighted.
 let calcTmDivisor = 1;
+// Tracks whether the person has taken manual control of the CAD toggle
+// for the CURRENT price text — without this, unchecking it by hand
+// immediately gets overridden right back to checked on the very next
+// keystroke, since the pasted text still visibly says "CA $...". Auto-
+// detection should only ever be a one-time suggestion, never something
+// that fights a manual correction.
+let calcTmCadManuallySet = false;
 calcTmDivisorGrid.innerHTML = Array.from({ length: 25 }, (_, i) => i + 1)
   .map(n => `<button type="button" class="calculator-divisor-btn ${n === calcTmDivisor ? 'active' : ''}" data-divisor="${n}">${n}</button>`)
   .join('');
 function formatCalcResult(n){
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+// Both fields need to accept a straight paste from a listing — "$974.00",
+// "974.00", "974", with or without thousands commas, all need to parse
+// the same way. Also recognizes a leading "CA"/"CAD" (however it's
+// written — "CA $157.60", "CAD 157.60", "C$157.60") so pasting a
+// Ticketmaster price straight off a Canadian listing auto-detects as
+// CAD without needing to remember to flip the toggle by hand first.
+function parseMoneyValue(raw){
+  const str = (raw || '').trim();
+  if(!str) return { value: null, isCAD: false };
+  const isCAD = /\bCAD\b|\bCA\s*\$|^C\$/i.test(str);
+  const cleaned = str.replace(/CAD/gi, '').replace(/\bCA\b/gi, '').replace(/[^0-9.\-]/g, '');
+  const value = cleaned === '' ? null : parseFloat(cleaned);
+  return { value: (value !== null && !isNaN(value)) ? value : null, isCAD };
+}
+// Fetched once and cached for the rest of the session (exchange rates
+// don't meaningfully move minute to minute) — Frankfurter is a free,
+// key-free, CORS-enabled rate API backed by the European Central Bank,
+// so this needs no account or secret sitting in a public HTML file.
+// Deliberately never falls back to a hardcoded rate on failure: a stale
+// guess baked into the page would silently drift wrong over time in a
+// way nobody would notice, whereas a clear "rate unavailable" tells you
+// exactly when not to trust the converted number.
+let cadToUsdRate = null;
+let cadRateFetchPromise = null;
+async function ensureCadRate(){
+  if(cadToUsdRate !== null) return cadToUsdRate;
+  if(cadRateFetchPromise) return cadRateFetchPromise;
+  calcRateStatus.textContent = 'Fetching live CAD→USD rate…';
+  calcRateStatus.classList.remove('is-error');
+  cadRateFetchPromise = fetch('https://api.frankfurter.app/latest?from=CAD&to=USD')
+    .then(r => { if(!r.ok) throw new Error('bad response'); return r.json(); })
+    .then(data => {
+      const rate = data && data.rates && data.rates.USD;
+      if(!rate || isNaN(rate)) throw new Error('no rate in response');
+      cadToUsdRate = rate;
+      calcRateStatus.textContent = `Live rate: 1 CAD = ${formatCalcResult(rate)} USD (${data.date})`;
+      calcRateStatus.classList.remove('is-error');
+      return rate;
+    })
+    .catch(() => {
+      calcRateStatus.textContent = 'Couldn\'t fetch a live rate — check your connection and try again.';
+      calcRateStatus.classList.add('is-error');
+      return null;
+    })
+    .finally(() => { cadRateFetchPromise = null; });
+  return cadRateFetchPromise;
+}
 function updateVividCalc(){
-  const v = parseFloat(calcVividInput.value);
-  if(calcVividInput.value.trim() === '' || isNaN(v)){
+  const { value: v } = parseMoneyValue(calcVividInput.value);
+  if(v === null){
     calcVividResult.textContent = '—';
     calcVividResult.classList.add('is-empty');
   } else {
@@ -1813,15 +1971,41 @@ function updateVividCalc(){
   }
   updateCalcCompare();
 }
-function updateTmCalc(){
-  const price = parseFloat(calcTmPriceInput.value);
-  if(calcTmPriceInput.value.trim() === '' || isNaN(price)){
+async function updateTmCalc(){
+  const { value: price, isCAD: detectedCAD } = parseMoneyValue(calcTmPriceInput.value);
+  // Auto-check (never auto-uncheck) on detecting a CAD marker in what
+  // was typed/pasted — a person clearing the $ sign back out shouldn't
+  // silently flip the toggle back off underneath them. But once the
+  // toggle has been changed by hand for this price, that choice sticks
+  // regardless of what the text still says, until the field is cleared
+  // or reset.
+  if(detectedCAD && !calcTmCadToggle.checked && !calcTmCadManuallySet){
+    calcTmCadToggle.checked = true;
+    calcTmCadToggle.closest('.calculator-cad-toggle').classList.add('is-checked');
+  }
+  if(price === null){
+    calcTmCadManuallySet = false;
     calcTmResult.textContent = '—';
     calcTmResult.classList.add('is-empty');
-  } else {
-    calcTmResult.classList.remove('is-empty');
-    calcTmResult.textContent = formatCalcResult(price / calcTmDivisor);
+    calcRateStatus.textContent = '';
+    updateCalcCompare();
+    return;
   }
+  let usdPrice = price;
+  if(calcTmCadToggle.checked){
+    const rate = await ensureCadRate();
+    if(rate === null){
+      calcTmResult.textContent = '—';
+      calcTmResult.classList.add('is-empty');
+      updateCalcCompare();
+      return;
+    }
+    usdPrice = price * rate;
+  } else {
+    calcRateStatus.textContent = '';
+  }
+  calcTmResult.classList.remove('is-empty');
+  calcTmResult.textContent = formatCalcResult(usdPrice / calcTmDivisor);
   updateCalcCompare();
 }
 // The actual point of running both numbers side by side: is buying at
@@ -1833,15 +2017,21 @@ function updateTmCalc(){
 // comparison is actually about. 30%+ margin is called out in green as
 // the "typically want to see this" bar; a real loss (spending more per
 // seat than you'd net back) is called out in red so it's not mistaken
-// for a small, acceptable margin.
-function updateCalcCompare(){
-  const vividVal = parseFloat(calcVividInput.value);
-  const tmPrice = parseFloat(calcTmPriceInput.value);
-  const vividValid = calcVividInput.value.trim() !== '' && !isNaN(vividVal);
-  const tmValid = calcTmPriceInput.value.trim() !== '' && !isNaN(tmPrice);
-  if(!vividValid || !tmValid){
+// for a small, acceptable margin. Ticketmaster's own price is already
+// USD-converted by the time it gets here (see updateTmCalc), so this
+// never needs to know about CAD itself.
+async function updateCalcCompare(){
+  const { value: vividVal } = parseMoneyValue(calcVividInput.value);
+  const { value: tmRaw } = parseMoneyValue(calcTmPriceInput.value);
+  if(vividVal === null || tmRaw === null){
     calcCompare.style.display = 'none';
     return;
+  }
+  let tmPrice = tmRaw;
+  if(calcTmCadToggle.checked){
+    const rate = cadToUsdRate; // already resolved (or attempted) by updateTmCalc; avoid a second fetch race here
+    if(rate === null || rate === undefined){ calcCompare.style.display = 'none'; return; }
+    tmPrice = tmRaw * rate;
   }
   const vividNet = vividVal * 0.74;
   const tmPerSeat = tmPrice / calcTmDivisor;
@@ -1869,6 +2059,12 @@ function updateCalcCompare(){
 }
 calcVividInput.addEventListener('input', updateVividCalc);
 calcTmPriceInput.addEventListener('input', updateTmCalc);
+calcTmCadToggle.addEventListener('change', () => {
+  calcTmCadManuallySet = true;
+  calcTmCadToggle.closest('.calculator-cad-toggle').classList.toggle('is-checked', calcTmCadToggle.checked);
+  if(!calcTmCadToggle.checked) calcRateStatus.textContent = '';
+  updateTmCalc();
+});
 calcTmDivisorGrid.addEventListener('click', e => {
   const btn = e.target.closest('.calculator-divisor-btn');
   if(!btn) return;
@@ -1886,6 +2082,10 @@ openCalculatorDirectBtn.addEventListener('click', () => {
 calcResetBtn.addEventListener('click', () => {
   calcVividInput.value = '';
   calcTmPriceInput.value = '';
+  calcTmCadToggle.checked = false;
+  calcTmCadManuallySet = false;
+  calcTmCadToggle.closest('.calculator-cad-toggle').classList.remove('is-checked');
+  calcRateStatus.textContent = '';
   calcTmDivisor = 1;
   calcTmDivisorGrid.querySelectorAll('.calculator-divisor-btn').forEach(b => b.classList.toggle('active', b.dataset.divisor === '1'));
   updateVividCalc();
@@ -1970,6 +2170,7 @@ insightsBody.addEventListener('click', async e => {
   }
   const deleteBtn = e.target.closest('[data-action="delete-price-history"]');
   if(deleteBtn){
+    if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
     pushUndo();
     const key = deleteBtn.dataset.key;
     const index = parseInt(deleteBtn.dataset.index, 10);
@@ -1981,6 +2182,7 @@ insightsBody.addEventListener('click', async e => {
   }
   const deleteHistBtn = e.target.closest('[data-action="delete-historical-price-history"]');
   if(deleteHistBtn){
+    if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
     const key = deleteHistBtn.dataset.key;
     const index = parseInt(deleteHistBtn.dataset.index, 10);
     if(isNaN(index)) return;
@@ -2102,6 +2304,17 @@ function savePinnedJumpNames(){
 }
 let pinnedJumpNames = loadPinnedJumpNames();
 let openNotesKey = null; // eventKey of the one card whose notes panel is expanded, if any
+// Admin mode gates every destructive action (delete a card, clear a
+// whole sheet, permanently remove something from Trash or History,
+// delete a price-history entry, close a sheet tab) behind a single
+// passcode — anyone without it can still do all the everyday stuff
+// (notes, star, pin, codes, prices, archive/restore) freely, since none
+// of that can actually lose data. Deliberately NOT persisted to
+// localStorage: it resets to locked on every reload, so leaving the tab
+// open on a shared computer doesn't leave admin actions sitting
+// unlocked indefinitely.
+let adminModeOn = false;
+const ADMIN_PASSCODE = '2121';
 let noteSnapshotOnOpen = null; // ann.note captured when the panel opened, so closing can tell if it actually changed
 let historyExpandedKeys = new Set(); // keys whose note-history list is currently expanded
 let archiveOnly = false; // filter: show only archived events instead of hiding them
@@ -2262,7 +2475,11 @@ archiveFilterBtn.addEventListener('click', () => {
   render();
 });
 
-clearPastBtn.addEventListener('click', () => { clearPastEvents(); moreMenuPopover.classList.remove('open'); });
+clearPastBtn.addEventListener('click', () => {
+  if(!adminModeOn){ alert('Clearing requires admin mode — unlock it from the "..." menu.'); return; }
+  clearPastEvents();
+  moreMenuPopover.classList.remove('open');
+});
 
 undoBtn.addEventListener('click', () => { undo(); });
 redoBtn.addEventListener('click', () => { redo(); });
@@ -2428,6 +2645,7 @@ confirmArchiveBtn.addEventListener('click', async () => {
 // needed here either (see deleteSingleEvent for the full reasoning).
 confirmDeleteBtn.addEventListener('click', async () => {
   if(!selectedKeys.size) return;
+  if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
   pushUndo();
   const deletedAt = new Date().toISOString();
   const toTrash = allEvents.filter(ev => selectedKeys.has(eventKey(ev))).map(ev => {
@@ -3891,6 +4109,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if(e.key === 'Delete' || e.key === 'x'){
+    if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
     deleteSingleEvent(selectedKey);
     return;
   }
@@ -4023,6 +4242,7 @@ async function renameSheet(oldName){
 }
 
 async function deleteSheet(name){
+  if(!adminModeOn){ alert('Deleting a sheet requires admin mode — unlock it from the "..." menu.'); return; }
   if(sheets.length <= 1){
     alert("You need at least one sheet — try renaming it or clearing its data instead.");
     return;
@@ -4054,7 +4274,7 @@ function renderTabs(){
     <button class="sheet-tab ${s.name === activeSheetName ? 'active' : ''}" data-name="${escapeHtml(s.name)}" title="${s.mode === 'trash' ? 'Deleted events — restore them or clear them out for good' : 'Drag to reorder — double-click to rename'}" draggable="${s.mode !== 'trash'}">
       <span class="sheet-tab-icon">${s.mode === 'usopen' ? '🎾' : s.mode === 'presale' ? '🎫' : s.mode === 'broadway' ? '🎭' : s.mode === 'trash' ? '🗑' : '🎟️'}</span>
       <span class="tab-label">${escapeHtml(s.name)}</span>
-      ${s.mode === 'trash' ? '' : `<span class="tab-close" data-name="${escapeHtml(s.name)}" title="Delete sheet">×</span>`}
+      ${(s.mode === 'trash' || !adminModeOn) ? '' : `<span class="tab-close" data-name="${escapeHtml(s.name)}" title="Delete sheet">×</span>`}
     </button>
   `).join('') + `<button class="sheet-tab add-tab" id="addSheetBtn" title="Start a new, separate sheet (name it, choose US Open mode if it needs Day/Night)">+</button>`;
 
@@ -4382,7 +4602,7 @@ function renderPresale(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = hasData ? 'block' : 'none';
+  clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
 
   if(!hasData){
     listRoot.innerHTML = '';
@@ -4700,7 +4920,7 @@ function renderStandard(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = hasData ? 'block' : 'none';
+  clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
 
   if(!hasData){
     listRoot.innerHTML = '';
@@ -4926,7 +5146,7 @@ function cardHtmlPresale(ev){
   const metaRow = codeMetaRowHtml(ev);
 
   return `
-    <div class="ticket mode-presale-card ${ann.pinned ? 'is-pinned' : ''} ${isSelected ? 'is-selected' : ''}" data-key="${escapeHtml(key)}">
+    <div class="ticket mode-presale-card ${ann.pinned ? 'is-pinned' : ''} ${ann.rating ? 'is-starred' : ''} ${isSelected ? 'is-selected' : ''}" data-key="${escapeHtml(key)}">
       ${selectMode ? `<button type="button" class="select-check ${isSelected ? 'checked' : ''}" data-action="select" data-key="${escapeHtml(key)}" aria-label="Select"></button>` : ''}
       <div class="ticket-header-row">
         ${dateHeadline ? `<div class="card-date-badge" title="${escapeHtml(dateHeadline.fullLabel)}">${escapeHtml(dateHeadline.datePart)}<span class="badge-time">${escapeHtml(dateHeadline.timePart)}</span></div>` : '<div></div>'}
@@ -4989,14 +5209,14 @@ function cardHtmlStandard(ev){
         </div>
         <div class="trash-action-row">
           <button type="button" class="trash-restore-btn" data-action="restore-trash" data-key="${escapeHtml(key)}">↺ Restore</button>
-          <button type="button" class="trash-forever-btn" data-action="delete-forever" data-key="${escapeHtml(key)}">🗑 Delete forever</button>
+          ${adminModeOn ? `<button type="button" class="trash-forever-btn" data-action="delete-forever" data-key="${escapeHtml(key)}">🗑 Delete forever</button>` : ''}
         </div>
       </div>
     </div>`;
   }
 
   return `
-    <div class="ticket mode-standard ${ann.pinned ? 'is-pinned' : ''} ${ann.isNew ? 'is-new' : ''} ${isSelected ? 'is-selected' : ''}" data-key="${escapeHtml(key)}">
+    <div class="ticket mode-standard ${ann.pinned ? 'is-pinned' : ''} ${ann.isNew ? 'is-new' : ''} ${ann.rating ? 'is-starred' : ''} ${isSelected ? 'is-selected' : ''}" data-key="${escapeHtml(key)}">
       ${selectMode ? `<button type="button" class="select-check ${isSelected ? 'checked' : ''}" data-action="select" data-key="${escapeHtml(key)}" aria-label="Select"></button>` : ''}
       <div class="ticket-header-row">
         ${dateHeadline ? `<div class="card-date-badge" title="${escapeHtml(dateHeadline.fullLabel)}">${escapeHtml(dateHeadline.datePart)}<span class="badge-time">${escapeHtml(dateHeadline.timePart)}</span></div>` : '<div></div>'}
@@ -5414,9 +5634,9 @@ function insightsBodyHtml(insights){
       // lives in the History sheet, not in the normal annotations map,
       // so it needs its own handler that goes and edits that sheet
       // specifically (see deleteHistoricalPriceHistoryEntry).
-      const deleteBtn = h.isHistorical
+      const deleteBtn = !adminModeOn ? '' : (h.isHistorical
         ? `<button type="button" class="history-delete-btn" data-action="delete-historical-price-history" data-key="${escapeHtml(h.key)}" data-index="${h.index}" title="Remove this entry from History permanently">×</button>`
-        : `<button type="button" class="history-delete-btn" data-action="delete-price-history" data-key="${escapeHtml(h.key)}" data-index="${h.index}" title="Remove this entry — use this if it was logged by mistake">×</button>`;
+        : `<button type="button" class="history-delete-btn" data-action="delete-price-history" data-key="${escapeHtml(h.key)}" data-index="${h.index}" title="Remove this entry — use this if it was logged by mistake">×</button>`);
       return `<div class="insights-rawhistory-row">
         <span class="insights-rawhistory-label">${escapeHtml(h.label)}</span>
         <span class="insights-rawhistory-price">was $${escapeHtml(h.price)}</span>
@@ -5573,7 +5793,7 @@ function priceHistoryHtml(key, ann){
       return `<div class="history-entry">
         <div class="history-date">${escapeHtml(when)}</div>
         <div class="history-text">${escapeHtml(label)} — ${escapeHtml(priceText)}</div>
-        <button type="button" class="history-delete-btn" data-action="delete-price-history" data-key="${escapeHtml(key)}" data-index="${originalIndex}" title="Remove this entry — use this if it was logged by mistake">×</button>
+        ${adminModeOn ? `<button type="button" class="history-delete-btn" data-action="delete-price-history" data-key="${escapeHtml(key)}" data-index="${originalIndex}" title="Remove this entry — use this if it was logged by mistake">×</button>` : ''}
       </div>`;
     }).join('');
   }
@@ -5668,9 +5888,9 @@ function notesPanelHtml(key, ann, ev, showPresaleFields = false){
       </div>
       ${linksHtml}
       <div class="panel-action-row">
-        ${showPresaleFields ? `<button type="button" class="panel-release-btn" data-action="release-presale" data-key="${escapeHtml(key)}" title="Take this off the active presale list, but keep its code and notes permanently searchable under this artist">📜 Release</button>` : ''}
+        ${(showPresaleFields && adminModeOn) ? `<button type="button" class="panel-release-btn" data-action="release-presale" data-key="${escapeHtml(key)}" title="Take this off the active presale list, but keep its code and notes permanently searchable under this artist">📜 Release</button>` : ''}
         <button type="button" class="panel-archive-btn" data-action="archive" data-key="${escapeHtml(key)}">${ann.archived ? '📤 Unarchive' : '📦 Archive'}</button>
-        <button type="button" class="panel-delete-btn" data-action="delete" data-key="${escapeHtml(key)}">🗑 Delete</button>
+        ${adminModeOn ? `<button type="button" class="panel-delete-btn" data-action="delete" data-key="${escapeHtml(key)}">🗑 Delete</button>` : ''}
       </div>
     </div>`;
 }
@@ -5693,7 +5913,7 @@ function shiftBlockHtml(ev, shift){
   const isSelected = selectMode && selectedKeys.has(key);
 
   return `
-    <div class="shift-block shift-${shift} ${ann.pinned ? 'is-pinned' : ''} ${ann.isNew ? 'is-new' : ''} ${isSelected ? 'is-selected' : ''}" data-key="${escapeHtml(key)}">
+    <div class="shift-block shift-${shift} ${ann.pinned ? 'is-pinned' : ''} ${ann.isNew ? 'is-new' : ''} ${ann.rating ? 'is-starred' : ''} ${isSelected ? 'is-selected' : ''}" data-key="${escapeHtml(key)}">
       ${selectMode ? `<button type="button" class="select-check ${isSelected ? 'checked' : ''}" data-action="select" data-key="${escapeHtml(key)}" aria-label="Select"></button>` : ''}
       <div class="shift-block-toolbar">
         <div class="shift-block-icons">
@@ -6003,7 +6223,7 @@ function renderUsOpen(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = hasData ? 'block' : 'none';
+  clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
 
   if(!hasData){
     listRoot.innerHTML = '';
@@ -6073,7 +6293,7 @@ function renderBroadway(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = hasData ? 'block' : 'none';
+  clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
 
   if(!hasData){
     listRoot.innerHTML = '';
@@ -6228,6 +6448,7 @@ fileInput.addEventListener('change', e => {
 });
 
 clearBtn.addEventListener('click', () => {
+  if(!adminModeOn){ alert('Clearing requires admin mode — unlock it from the "..." menu.'); return; }
   clearActiveSheetEvents();
   moreMenuPopover.classList.remove('open');
 });
@@ -6503,6 +6724,7 @@ listRoot.addEventListener('click', async e => {
   // Delete a single event.
   const deleteBtn = e.target.closest('[data-action="delete"]');
   if(deleteBtn){
+    if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
     deleteSingleEvent(deleteBtn.dataset.key);
     return;
   }
@@ -6515,6 +6737,7 @@ listRoot.addEventListener('click', async e => {
 
   const deleteForeverBtn = e.target.closest('[data-action="delete-forever"]');
   if(deleteForeverBtn){
+    if(!adminModeOn){ alert('Permanent deletion requires admin mode — unlock it from the "..." menu.'); return; }
     if(confirm('Permanently delete this? There is no way to get it back after this.')){
       permanentlyDeleteFromTrash(deleteForeverBtn.dataset.key);
     }
@@ -6535,6 +6758,7 @@ listRoot.addEventListener('click', async e => {
 
   const releaseBtn = e.target.closest('[data-action="release-presale"]');
   if(releaseBtn){
+    if(!adminModeOn){ alert('Releasing requires admin mode — unlock it from the "..." menu.'); return; }
     if(confirm('Release this from the active presale list? Its code and notes stay searchable under this artist in History, but it comes off this sheet for good.')){
       releaseFromPresale(releaseBtn.dataset.key);
     }
@@ -6614,6 +6838,7 @@ listRoot.addEventListener('click', async e => {
   // it like any other edit.
   const deletePriceHistoryBtn = e.target.closest('[data-action="delete-price-history"]');
   if(deletePriceHistoryBtn){
+    if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
     pushUndo();
     const key = deletePriceHistoryBtn.dataset.key;
     const index = parseInt(deletePriceHistoryBtn.dataset.index, 10);
@@ -6981,6 +7206,7 @@ window.addEventListener('beforeunload', () => { saveNotesNow(); });
 
 async function initApp(){
   applyColumnCount();
+  updateAdminModeUI();
   if(DEFAULT_SYNC_URL){
     syncUrl = DEFAULT_SYNC_URL;
     syncUrlInput.value = syncUrl;
