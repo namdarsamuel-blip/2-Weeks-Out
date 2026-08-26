@@ -1171,6 +1171,18 @@
      Full width here means every number gets a comfortable tap target,
      and both result boxes below end up the same height as each other
      since neither one has anything else stacked inside it anymore. */
+  .add-show-field{margin-bottom:12px;}
+  .add-show-label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;}
+  .add-show-hint{
+    font-size:11.5px;color:var(--teal);background:rgba(79,200,191,.08);
+    border:1px solid rgba(79,200,191,.3);border-radius:7px;padding:8px 10px;margin-bottom:12px;
+  }
+  .add-show-submit-btn{
+    width:100%;font-family:'Inter',sans-serif;font-size:13.5px;font-weight:700;
+    padding:11px;border-radius:8px;border:none;background:var(--teal);color:#0d1a19;
+    cursor:pointer;transition:filter .15s ease;margin-top:4px;
+  }
+  .add-show-submit-btn:hover{filter:brightness(1.08);}
   .calculator-cad-toggle{
     display:flex;align-items:center;gap:6px;margin-top:10px;
     font-size:11.5px;color:var(--muted);cursor:pointer;user-select:none;
@@ -1647,6 +1659,7 @@
       <button class="btn ghost" id="selectModeBtn" title="Select cards to archive or delete, like picking photos on a phone">🗑 Select</button>
       <button class="btn ghost" id="confirmArchiveBtn" style="display:none;" disabled>Archive</button>
       <button class="btn danger" id="confirmDeleteBtn" style="display:none;" disabled>Delete</button>
+      <button class="btn ghost" id="addShowBtn" title="Add a single show by hand — paste a Ticketmaster link and it'll try to pull the date and name out of it for you">+ Add show</button>
       <button class="btn primary" id="uploadBtn" title="Adds to THIS sheet — merges in, refreshes matches, skips duplicates. Use + above instead to start a separate new sheet.">Add CSV</button>
       <input type="file" id="fileInput" accept=".csv">
       <div class="sync-wrap">
@@ -1755,6 +1768,36 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="addShowModal" style="display:none;">
+  <div class="modal-box insights-modal calculator-modal">
+    <div class="insights-modal-header">
+      <h3 class="modal-title">+ Add show</h3>
+      <button type="button" class="insights-close-btn" id="closeAddShowBtn" aria-label="Close">×</button>
+    </div>
+    <div class="insights-modal-body">
+      <p class="calculator-desc" style="margin-bottom:14px;">Paste a Ticketmaster link first — if the URL has the show's name and date built into it, this fills those in for you. Works best on links like <span style="font-family:'IBM Plex Mono',monospace;">ticketmaster.com/artist-name-tour-city-state-12-22-2026/event/...</span>; a bare event-ID link (no readable text in it) won't have anything to pull out, so you'll fill those in by hand.</p>
+      <div class="add-show-field">
+        <label class="add-show-label">Ticket link</label>
+        <input type="text" autocomplete="off" class="calculator-input" id="addShowLinkInput" placeholder="Paste a Ticketmaster/VividSeats/StubHub link">
+      </div>
+      <div class="add-show-field">
+        <label class="add-show-label">Show name</label>
+        <input type="text" autocomplete="off" class="calculator-input" id="addShowNameInput" placeholder="e.g. Jonas Brothers">
+      </div>
+      <div class="add-show-field">
+        <label class="add-show-label">Venue</label>
+        <input type="text" autocomplete="off" class="calculator-input" id="addShowVenueInput" placeholder="e.g. Prudential Center, Newark, NJ">
+      </div>
+      <div class="add-show-field">
+        <label class="add-show-label">Date</label>
+        <input type="text" autocomplete="off" class="calculator-input" id="addShowDateInput" placeholder="e.g. Dec 22, 2026 or 12/22/2026">
+      </div>
+      <div class="add-show-hint" id="addShowSlugHint" style="display:none;"></div>
+      <button type="button" class="add-show-submit-btn" id="addShowSubmitBtn">+ Add to this sheet</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="calculatorModal" style="display:none;">
   <div class="modal-box insights-modal calculator-modal">
     <div class="insights-modal-header">
@@ -1769,12 +1812,12 @@
         <div class="calculator-col calculator-col-vivid">
           <p class="notes-label calculator-label-vivid">VividSeats</p>
           <p class="calculator-desc">A value, × 0.74 — always USD</p>
-          <input type="text" inputmode="decimal" class="calculator-input" id="calcVividInput" placeholder="e.g. $974.00, 974.00, or 974">
+          <input type="text" inputmode="decimal" autocomplete="off" class="calculator-input" id="calcVividInput" placeholder="e.g. $974.00, 974.00, or 974">
         </div>
         <div class="calculator-col calculator-col-tm">
           <p class="notes-label calculator-label-tm">Ticketmaster</p>
           <p class="calculator-desc">Final price, ÷ a number below</p>
-          <input type="text" inputmode="decimal" class="calculator-input" id="calcTmPriceInput" placeholder="e.g. $974.00 or CA $157.60">
+          <input type="text" inputmode="decimal" autocomplete="off" class="calculator-input" id="calcTmPriceInput" placeholder="e.g. $974.00 or CA $157.60">
           <label class="calculator-cad-toggle">
             <input type="checkbox" id="calcTmCadToggle">
             🇨🇦 This is in CAD — convert to USD
@@ -1902,6 +1945,104 @@ adminModeBtn.addEventListener('click', () => {
   }
 });
 const calculatorModal = $('#calculatorModal');
+// "+ Add show" — a fast path for a single show without needing a whole
+// CSV for it. Tries to save some typing when the pasted link is one of
+// Ticketmaster's descriptive-URL style ones (name/venue/date baked
+// right into the path, there for SEO — the same slug that shows up in
+// search results) by pulling a date and a readable text hint out of it.
+// This is plain string parsing on the URL itself, nothing fetched from
+// Ticketmaster's servers — their event pages actively block automated
+// fetches (bot detection), and that's not something to try to get
+// around even if a workaround existed. A bare event-ID link (no
+// readable words in the path — just a short opaque code, which
+// Ticketmaster also hands out for the exact same events) simply won't
+// have anything in it to extract, and this correctly leaves the form
+// blank in that case rather than showing something made up.
+function parseTicketmasterSlugHint(url){
+  let path;
+  try{ path = new URL(url).pathname; }catch(err){ return null; }
+  if(!/ticketmaster\.com$/i.test(new URL(url).hostname.replace(/^www\./, ''))) return null;
+  // The descriptive part always comes before /event/ or /production/;
+  // a bare-ID link just has that segment (nothing to work with).
+  const slugMatch = path.match(/^\/([^/]+)\/(?:event|production)\//i);
+  if(!slugMatch) return null;
+  let slug = decodeURIComponent(slugMatch[1]);
+  const dateMatch = slug.match(/(\d{1,2})-(\d{1,2})-(\d{4})/);
+  let dateStr = null;
+  if(dateMatch){
+    const [full, m, d, y] = dateMatch;
+    const parsed = new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}T00:00:00`);
+    if(!isNaN(parsed.getTime())){
+      dateStr = parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    slug = slug.slice(0, dateMatch.index) + slug.slice(dateMatch.index + full.length);
+  }
+  const nameHint = slug.split('-').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').replace(/\s+/g, ' ').trim();
+  if(!nameHint && !dateStr) return null;
+  return { nameHint: nameHint || null, dateStr };
+}
+
+const addShowModal = $('#addShowModal');
+const addShowBtn = $('#addShowBtn');
+const closeAddShowBtn = $('#closeAddShowBtn');
+const addShowLinkInput = $('#addShowLinkInput');
+const addShowNameInput = $('#addShowNameInput');
+const addShowVenueInput = $('#addShowVenueInput');
+const addShowDateInput = $('#addShowDateInput');
+const addShowSlugHint = $('#addShowSlugHint');
+const addShowSubmitBtn = $('#addShowSubmitBtn');
+
+function openAddShowModal(){
+  addShowLinkInput.value = '';
+  addShowNameInput.value = '';
+  addShowVenueInput.value = '';
+  addShowDateInput.value = '';
+  addShowSlugHint.style.display = 'none';
+  addShowModal.style.display = 'flex';
+  addShowLinkInput.focus();
+}
+function closeAddShowModal(){ addShowModal.style.display = 'none'; }
+addShowBtn.addEventListener('click', openAddShowModal);
+closeAddShowBtn.addEventListener('click', closeAddShowModal);
+addShowModal.addEventListener('click', e => { if(e.target === addShowModal) closeAddShowModal(); });
+
+addShowLinkInput.addEventListener('input', () => {
+  const hint = parseTicketmasterSlugHint(addShowLinkInput.value.trim());
+  if(!hint){
+    addShowSlugHint.style.display = 'none';
+    return;
+  }
+  // Never overwrites something already typed — this is a starting
+  // point offered once, not something that should fight a manual edit.
+  if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
+  if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
+  addShowSlugHint.style.display = 'block';
+  addShowSlugHint.textContent = `Pulled from the link: ${[hint.nameHint, hint.dateStr].filter(Boolean).join(' · ')} — the name is a raw guess from the URL text, so it's worth splitting the venue out of it and double-checking the date.`;
+});
+
+addShowSubmitBtn.addEventListener('click', async () => {
+  const name = addShowNameInput.value.trim();
+  const venue = addShowVenueInput.value.trim();
+  const dateStrRaw = addShowDateInput.value.trim();
+  const link = addShowLinkInput.value.trim();
+  if(!name){ alert('Give it at least a name.'); addShowNameInput.focus(); return; }
+  if(!sheets.length || (activeSheet() && (activeSheet().mode === 'trash' || activeSheet().mode === 'history'))){
+    alert('Switch to a regular sheet first — Trash and History aren\'t places to add a new show.');
+    return;
+  }
+  const parsedDate = dateStrRaw ? parseEventDate(dateStrRaw) : null;
+  const newEvent = {
+    name, venue, dateStr: dateStrRaw,
+    dateObj: parsedDate ? parsedDate.toISOString() : null,
+    primarySite: 'ticketmaster', primaryLink: link, vividLink: '', stubLink: ''
+  };
+  pushUndo();
+  allEvents = [...allEvents, newEvent];
+  render();
+  await pushActiveSheetToRemote();
+  closeAddShowModal();
+});
+
 const openCalculatorDirectBtn = $('#openCalculatorDirectBtn');
 const calcResetBtn = $('#calcResetBtn');
 const closeCalculatorBtn = $('#closeCalculatorBtn');
@@ -4118,6 +4259,7 @@ document.addEventListener('keydown', e => {
     if(addSheetModal.style.display !== 'none') closeAddSheetModal();
     if(insightsModal.style.display !== 'none') closeInsightsModal();
     if(calculatorModal.style.display !== 'none') closeCalculatorModal();
+    if(addShowModal.style.display !== 'none') closeAddShowModal();
     return;
   }
 
