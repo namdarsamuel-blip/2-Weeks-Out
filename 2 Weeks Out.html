@@ -1252,6 +1252,32 @@
   .insights-stat-card.is-new .insights-stat-value{color:var(--coral);}
   .insights-stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
   .insights-stat-sub{font-size:9.5px;color:var(--muted);opacity:.75;margin-top:1px;}
+  .history-search-list{display:flex;flex-direction:column;gap:8px;padding:0 20px 20px;}
+  .history-search-row{
+    padding:12px 14px;border-radius:10px;
+    background:rgba(255,255,255,.02);border:1px solid var(--hairline);
+    position:relative;
+  }
+  .history-search-main{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-right:110px;}
+  .history-search-name{font-weight:700;color:var(--text);font-size:13.5px;}
+  .history-search-date{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);}
+  .history-search-venue{color:var(--muted);font-size:12px;margin-top:2px;}
+  .history-search-codes{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .history-search-code-chip{
+    font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:11px;
+    background:rgba(242,193,78,.1);border:1px solid rgba(242,193,78,.3);color:var(--amber);
+    padding:2px 7px;border-radius:5px;
+  }
+  .history-search-note{font-size:12px;color:var(--text);opacity:.85;margin-top:8px;white-space:pre-wrap;}
+  .history-search-sections{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .history-search-restore-btn{
+    position:absolute;top:12px;right:14px;
+    font-family:'Inter',sans-serif;font-size:11.5px;font-weight:600;
+    padding:6px 10px;border-radius:7px;
+    border:1px solid var(--hairline);background:var(--card);color:var(--teal);
+    cursor:pointer;transition:border-color .15s ease,background .15s ease;
+  }
+  .history-search-restore-btn:hover{border-color:var(--teal);background:rgba(79,200,191,.08);}
   .insights-shows-list{
     display:flex;flex-direction:column;gap:4px;margin-bottom:4px;
     max-height:140px;overflow-y:auto;
@@ -1643,7 +1669,6 @@
           <button class="menu-row-btn" id="clearPastBtn" title="Remove events dated before today">🗑 Clear past</button>
           <button class="menu-row-btn" id="clearBtn" style="display:none;">🗑 Clear data</button>
           <button class="menu-row-btn" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
-          <button class="menu-row-btn" id="viewHistoryBtn" title="Browse snapshots saved from past Clear-data actions — kept out of daily use, only shown when you open it">📜 View history</button>
           <button class="menu-row-btn" id="adminModeBtn" title="Unlocks delete, clear, and permanent-removal actions. Everyday edits (notes, star, pin, codes, prices) never need this.">🔒 Admin mode</button>
           <div class="menu-row-divider"></div>
           <p class="notes-label">Keyboard shortcuts</p>
@@ -1778,16 +1803,6 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="historyModal" style="display:none;">
-  <div class="modal-box insights-modal">
-    <div class="insights-modal-header">
-      <h3 class="modal-title">📜 History</h3>
-      <button type="button" class="insights-close-btn" id="closeHistoryBtn" aria-label="Close">×</button>
-    </div>
-    <div class="insights-modal-body" id="historyBody"></div>
-  </div>
-</div>
-
 <script>
 const $ = sel => document.querySelector(sel);
 const fileInput = $('#fileInput');
@@ -1854,9 +1869,6 @@ const insightsModal = $('#insightsModal');
 const insightsTitle = $('#insightsTitle');
 const insightsBody = $('#insightsBody');
 const closeInsightsBtn = $('#closeInsightsBtn');
-const historyModal = $('#historyModal');
-const historyBody = $('#historyBody');
-const viewHistoryBtn = $('#viewHistoryBtn');
 const adminModeBtn = $('#adminModeBtn');
 const adminBadge = $('#adminBadge');
 function updateAdminModeUI(){
@@ -1932,19 +1944,43 @@ function formatCalcResult(n){
 function parseMoneyValue(raw){
   const str = (raw || '').trim();
   if(!str) return { value: null, isCAD: false };
-  const isCAD = /\bCAD\b|\bCA\s*\$|^C\$/i.test(str);
+  // Matches "CAD 157.60", "CA $157.60", "CA 157.60" (no $ at all),
+  // "C$157.60" — anywhere the string starts with a Canadian marker,
+  // with or without a dollar sign right after it. \b keeps this from
+  // false-triggering on a word that just happens to start with those
+  // letters (like "Cash").
+  const isCAD = /^\s*(CAD|CA)\b|^\s*C\$/i.test(str);
   const cleaned = str.replace(/CAD/gi, '').replace(/\bCA\b/gi, '').replace(/[^0-9.\-]/g, '');
   const value = cleaned === '' ? null : parseFloat(cleaned);
   return { value: (value !== null && !isNaN(value)) ? value : null, isCAD };
 }
 // Fetched once and cached for the rest of the session (exchange rates
-// don't meaningfully move minute to minute) — Frankfurter is a free,
-// key-free, CORS-enabled rate API backed by the European Central Bank,
-// so this needs no account or secret sitting in a public HTML file.
-// Deliberately never falls back to a hardcoded rate on failure: a stale
-// guess baked into the page would silently drift wrong over time in a
-// way nobody would notice, whereas a clear "rate unavailable" tells you
+// don't meaningfully move minute to minute) — every source here is
+// free and needs no account or key sitting in a public HTML file.
+// Tries each in order rather than betting everything on one: exchange
+// rate APIs occasionally migrate domains or add a version prefix (this
+// list already reflects one such move — Frankfurter's canonical host
+// changed from api.frankfurter.app to api.frankfurter.dev/v1), and a
+// page that only knows one exact URL breaks outright the next time that
+// happens instead of quietly trying the next option. Deliberately never
+// falls back to a hardcoded rate if every source fails: a stale guess
+// baked into the page would silently drift wrong over time in a way
+// nobody would notice, whereas a clear "rate unavailable" tells you
 // exactly when not to trust the converted number.
+const CAD_RATE_SOURCES = [
+  {
+    url: 'https://api.frankfurter.dev/v1/latest?from=CAD&to=USD',
+    parse: data => ({ rate: data && data.rates && data.rates.USD, date: data && data.date })
+  },
+  {
+    url: 'https://api.frankfurter.app/latest?from=CAD&to=USD',
+    parse: data => ({ rate: data && data.rates && data.rates.USD, date: data && data.date })
+  },
+  {
+    url: 'https://open.er-api.com/v6/latest/CAD',
+    parse: data => ({ rate: data && data.rates && data.rates.USD, date: data && (data.time_last_update_utc || '').slice(0, 16) })
+  }
+];
 let cadToUsdRate = null;
 let cadRateFetchPromise = null;
 async function ensureCadRate(){
@@ -1952,23 +1988,27 @@ async function ensureCadRate(){
   if(cadRateFetchPromise) return cadRateFetchPromise;
   calcRateStatus.textContent = 'Fetching live CAD→USD rate…';
   calcRateStatus.classList.remove('is-error');
-  cadRateFetchPromise = fetch('https://api.frankfurter.app/latest?from=CAD&to=USD')
-    .then(r => { if(!r.ok) throw new Error('bad response'); return r.json(); })
-    .then(data => {
-      const rate = data && data.rates && data.rates.USD;
-      if(!rate || isNaN(rate)) throw new Error('no rate in response');
-      cadToUsdRate = rate;
-      calcRateStatus.textContent = `Live rate: 1 CAD = ${formatCalcResult(rate)} USD (${data.date})`;
-      calcRateStatus.classList.remove('is-error');
-      return rate;
-    })
-    .catch(() => {
-      calcRateStatus.textContent = 'Couldn\'t fetch a live rate — check your connection and try again.';
-      calcRateStatus.classList.add('is-error');
-      return null;
-    })
-    .finally(() => { cadRateFetchPromise = null; });
-  return cadRateFetchPromise;
+  cadRateFetchPromise = (async () => {
+    for(const source of CAD_RATE_SOURCES){
+      try{
+        const r = await fetch(source.url);
+        if(!r.ok) continue;
+        const data = await r.json();
+        const { rate, date } = source.parse(data);
+        if(!rate || isNaN(rate)) continue;
+        cadToUsdRate = rate;
+        calcRateStatus.textContent = `Live rate: 1 CAD = ${formatCalcResult(rate)} USD${date ? ' (' + date + ')' : ''}`;
+        calcRateStatus.classList.remove('is-error');
+        return rate;
+      }catch(err){ /* try the next source */ }
+    }
+    calcRateStatus.textContent = 'Couldn\'t fetch a live rate — check your connection and try again.';
+    calcRateStatus.classList.add('is-error');
+    return null;
+  })();
+  const result = await cadRateFetchPromise;
+  cadRateFetchPromise = null;
+  return result;
 }
 function updateVividCalc(){
   const { value: v } = parseMoneyValue(calcVividInput.value);
@@ -2106,7 +2146,6 @@ function closeCalculatorModal(){ calculatorModal.style.display = 'none'; }
 closeCalculatorBtn.addEventListener('click', closeCalculatorModal);
 calculatorModal.addEventListener('click', e => { if(e.target === calculatorModal) closeCalculatorModal(); });
 
-const closeHistoryBtn = $('#closeHistoryBtn');
 const clearPastBtn = $('#clearPastBtn');
 
 // ---------- Delete passcode gate ----------
@@ -2208,79 +2247,9 @@ insightsBody.addEventListener('click', async e => {
 
 // History is read on demand from remoteCache, not kept in memory
 // separately — remoteCache already holds every sheet's data (that's how
-// switching sheets normally works), History included, so opening this
-// modal just needs to filter it down rather than fetch anything new.
-function openHistoryModal(){
-  const histSheet = sheets.find(s => s.mode === 'history');
-  const histEvents = histSheet ? remoteCache.filter(r => r.appSheet === histSheet.name) : [];
-  historyBody.innerHTML = historyBodyHtml(histEvents);
-  historyModal.style.display = 'flex';
-}
-function closeHistoryModal(){
-  historyModal.style.display = 'none';
-}
-viewHistoryBtn.addEventListener('click', () => {
-  openHistoryModal();
-  moreMenuPopover.classList.remove('open');
-});
-closeHistoryBtn.addEventListener('click', closeHistoryModal);
-historyModal.addEventListener('click', e => { if(e.target === historyModal) closeHistoryModal(); });
-document.addEventListener('keydown', e => {
-  if(e.key === 'Escape' && historyModal.style.display !== 'none') closeHistoryModal();
-});
-// Batches events by which Clear-data run put them here (same source
-// sheet + same instant) so browsing reads as "here's what Sheet 1
-// looked like on this specific day" — separate, collapsed-by-default
-// entries you open one at a time, rather than one long flat pile of
-// every event that's ever been cleared, which is exactly the "too much
-// content to see day to day" this whole feature exists to avoid.
-function historyBodyHtml(histEvents){
-  if(!histEvents.length){
-    return '<p class="insights-empty">No history yet — a snapshot is saved automatically every time you use "Clear data" on a sheet.</p>';
-  }
-  const batches = {};
-  histEvents.forEach(ev => {
-    const k = (ev.deletedFromSheet || 'Unknown sheet') + '|' + (ev.deletedAt || '');
-    if(!batches[k]) batches[k] = { sheetName: ev.deletedFromSheet || 'Unknown sheet', clearedAt: ev.deletedAt, events: [] };
-    batches[k].events.push(ev);
-  });
-  const sorted = Object.values(batches).sort((a, b) => new Date(b.clearedAt || 0) - new Date(a.clearedAt || 0));
-  return sorted.map((b, i) => {
-    const when = b.clearedAt ? new Date(b.clearedAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : 'Unknown date';
-    return `<div class="history-batch">
-      <button type="button" class="history-batch-header" data-action="toggle-history-batch" data-batch-index="${i}">
-        <span class="history-batch-title">${escapeHtml(b.sheetName)}</span>
-        <span class="history-batch-meta">${escapeHtml(when)} · ${b.events.length} event${b.events.length === 1 ? '' : 's'}</span>
-        <span class="history-batch-caret">▸</span>
-      </button>
-      <div class="history-batch-events" id="historyBatch${i}" style="display:none;">
-        ${b.events.map(historyEventRowHtml).join('')}
-      </div>
-    </div>`;
-  }).join('');
-}
-function historyEventRowHtml(ev){
-  const dateStr = ev.dateObj ? new Date(ev.dateObj).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-  const sections = (ev.sections || []).filter(s => (s.label && s.label.trim()) || (s.price && s.price.trim()));
-  return `<div class="history-event-row">
-    <div class="history-event-main">
-      <span class="history-event-name">${escapeHtml(ev.name || '')}</span>
-      ${dateStr ? `<span class="history-event-date">${escapeHtml(dateStr)}</span>` : ''}
-    </div>
-    <div class="history-event-venue">${escapeHtml(ev.venue || '')}</div>
-    ${ev.note && ev.note.trim() ? `<div class="history-event-note">📝 ${escapeHtml(ev.note.trim())}</div>` : ''}
-    ${sections.length ? `<div class="history-event-sections">${sections.map(s => `<span class="history-section-chip">${escapeHtml(s.label || '')} ${escapeHtml(s.price ? '$' + s.price : '')}</span>`).join('')}</div>` : ''}
-  </div>`;
-}
-historyBody.addEventListener('click', e => {
-  const header = e.target.closest('[data-action="toggle-history-batch"]');
-  if(!header) return;
-  const el = document.getElementById('historyBatch' + header.dataset.batchIndex);
-  if(!el) return;
-  const opening = el.style.display === 'none';
-  el.style.display = opening ? 'block' : 'none';
-  header.classList.toggle('open', opening);
-});
+// switching sheets normally works), History included, so surfacing it
+// (now folded into search — see renderSearchResults) just means
+// filtering that same cache down, not fetching anything new.
 
 let allEvents = [];
 let sheets = []; // [{name, mode}] — identity is the sheet's name, matching how rows are tagged remotely
@@ -3915,6 +3884,33 @@ async function moveEventsFromPresaleToStandard(keys, destSheetNameOverride){
   await pushSheetEvents(destSheetName, 'standard', [...destExisting, ...toAppend]);
 }
 
+// Bringing a History entry back is a COPY, not a move — History stays
+// intact as the permanent record either way, since the whole point of
+// finding it through search is that it's still there next time too.
+// "Bring back" is meant to be temporary/situational (an old code coming
+// back around, a tour returning), so leaving the original untouched in
+// History is the safer default over quietly deleting it from there.
+async function bringBackFromHistory(key){
+  const histSheet = sheets.find(s => s.mode === 'history');
+  if(!histSheet) return;
+  const histEvents = remoteCache.filter(r => r.appSheet === histSheet.name);
+  const source = histEvents.find(ev => eventKey(ev) === key);
+  if(!source) return;
+  const destSheetName = pickReleaseDestinationSheet();
+  if(!destSheetName) return;
+  const destExisting = remoteCache.filter(r => r.appSheet === destSheetName);
+  if(destExisting.some(ev => eventKey(ev) === key)){
+    alert('This is already on that sheet.');
+    return;
+  }
+  const copy = { ...source, isNew: false, archived: false };
+  delete copy.deletedAt;
+  delete copy.deletedFromSheet;
+  await pushSheetEvents(destSheetName, 'standard', [...destExisting, copy]);
+  if(destSheetName === activeSheetName) syncActiveSheetFromCache();
+  render();
+}
+
 // Puts a trashed event back on whatever sheet it came from, with its
 // note/sections/history all still intact (they were never touched while
 // it sat in the trash — restoring is just moving the same object back).
@@ -4854,6 +4850,12 @@ function renderSearchResults(query){
   });
 
   const matched = events.filter(ev => {
+    // Trash and History live on their own, separate from normal active
+    // results — Trash because it's deliberately out of the way (you go
+    // looking for it specifically, via its own tab), History because
+    // it gets its own dedicated section below instead of being mixed in
+    // as if it were just another live, editable card.
+    if(ev.__mode === 'trash' || ev.__mode === 'history') return false;
     if(!matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann)) return false;
     // Archived events should stay out of search results by default, same
     // as every other view in the app — otherwise a search brings back
@@ -4865,9 +4867,15 @@ function renderSearchResults(query){
     return !ann.archived;
   });
 
+  // A history sheet's snapshot inherits whatever note/sections/pinned
+  // the show had at the moment it was cleared/released — same as any
+  // live event — so the exact same matchesSearch check (name, venue,
+  // note text) works here unchanged; only the sheet-mode filter differs.
+  const historicalMatched = events.filter(ev => ev.__mode === 'history' && matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann));
+
   countLabel.textContent = `${matched.length} match${matched.length === 1 ? '' : 'es'} across all sheets`;
 
-  if(!matched.length){
+  if(!matched.length && !historicalMatched.length){
     listRoot.innerHTML = searchNoResultsHtml(query, events);
     return;
   }
@@ -4881,25 +4889,63 @@ function renderSearchResults(query){
   // Code field, etc.) still match normal browsing — only the grouping
   // itself is fixed to name.
   let html = '';
-  const searchGroups = groupByName(matched);
-  html += combinedNameJumpBarHtml(searchGroups);
-  searchGroups.forEach(g => {
-    if(g.showHeading){
-      const pinKeys = g.events.map(eventKey);
-      html += dayHeadingHtml(g.heading, '', pinKeys);
-    }
-    // Show each result the way its own sheet actually shows it — a
-    // presale event still needs its Code/public-sale-date field visible
-    // and copyable, not the plain standard card it'd otherwise fall back
-    // to. (US Open sessions stay on the standard card here since pairing
-    // up a matching Day/Night session across a cross-sheet search result
-    // is out of scope — that pairing only exists within its own sheet.)
-    html += `<div class="day-grid">${g.events.map(ev => {
-      const liveEv = searchAnnotationsMap.get(eventKey(ev)).ev;
-      return liveEv.__mode === 'presale' ? cardHtmlPresale(liveEv) : cardHtmlStandard(liveEv);
-    }).join('')}</div>`;
-  });
+  if(matched.length){
+    const searchGroups = groupByName(matched);
+    html += combinedNameJumpBarHtml(searchGroups);
+    searchGroups.forEach(g => {
+      if(g.showHeading){
+        const pinKeys = g.events.map(eventKey);
+        html += dayHeadingHtml(g.heading, '', pinKeys);
+      }
+      // Show each result the way its own sheet actually shows it — a
+      // presale event still needs its Code/public-sale-date field visible
+      // and copyable, not the plain standard card it'd otherwise fall back
+      // to. (US Open sessions stay on the standard card here since pairing
+      // up a matching Day/Night session across a cross-sheet search result
+      // is out of scope — that pairing only exists within its own sheet.)
+      html += `<div class="day-grid">${g.events.map(ev => {
+        const liveEv = searchAnnotationsMap.get(eventKey(ev)).ev;
+        return liveEv.__mode === 'presale' ? cardHtmlPresale(liveEv) : cardHtmlStandard(liveEv);
+      }).join('')}</div>`;
+    });
+  } else {
+    html += `<p class="insights-empty" style="padding:16px 20px;">No active matches for "${escapeHtml(query)}" — but see History below.</p>`;
+  }
+  if(historicalMatched.length){
+    html += historySearchSectionHtml(historicalMatched);
+  }
   listRoot.innerHTML = html;
+}
+// The bottom-of-search History section — this is what replaced the old
+// standalone "View history" menu item. Browsing history for its own
+// sake wasn't something anyone actually needed; what's actually useful
+// is finding it exactly when you're already looking for a specific
+// artist, right alongside whatever's currently live for them. Each past
+// show keeps its old note and code visible, and can be brought back
+// onto a real sheet with one click if it's relevant again.
+function historySearchSectionHtml(historicalMatched){
+  const sorted = [...historicalMatched].sort((a, b) => new Date(b.dateObj || 0) - new Date(a.dateObj || 0));
+  const rows = sorted.map(ev => {
+    const key = eventKey(ev);
+    const ann = searchAnnotationsMap.get(key).ann;
+    const dateStr = ev.dateObj ? new Date(ev.dateObj).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    const sections = (ann.sections || []).filter(s => (s.label && s.label.trim()) || (s.price && s.price.trim()));
+    const codes = (ev.code || '').split(',').map(c => c.trim()).filter(Boolean);
+    return `<div class="history-search-row">
+      <div class="history-search-main">
+        <span class="history-search-name">${escapeHtml(ev.name || '')}</span>
+        ${dateStr ? `<span class="history-search-date">${escapeHtml(dateStr)}</span>` : ''}
+      </div>
+      <div class="history-search-venue">${escapeHtml(ev.venue || '')}</div>
+      ${codes.length ? `<div class="history-search-codes">${codes.map(c => `<span class="history-search-code-chip">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
+      ${ann.note && ann.note.trim() ? `<div class="history-search-note">📝 ${escapeHtml(ann.note.trim())}</div>` : ''}
+      ${sections.length ? `<div class="history-search-sections">${sections.map(s => `<span class="history-section-chip">${escapeHtml(s.label || '')} ${escapeHtml(s.price ? '$' + s.price : '')}</span>`).join('')}</div>` : ''}
+      <button type="button" class="history-search-restore-btn" data-action="bring-back-history" data-key="${escapeHtml(key)}" title="Add this back onto a regular sheet — its code, notes, and prices come with it">↺ Bring back</button>
+    </div>`;
+  }).join('');
+  return `
+    <p class="notes-label" style="margin:24px 20px 8px;">📜 History (${historicalMatched.length})</p>
+    <div class="history-search-list">${rows}</div>`;
 }
 
 // A-Z jump strip shown above the list when headings are alphabetically
@@ -6726,6 +6772,12 @@ listRoot.addEventListener('click', async e => {
     if(confirm(`Move all ${keys.length} shows in this group off presale and onto a regular sheet? Their codes, notes, and prices all come with them.`)){
       moveEventsFromPresaleToStandard(keys);
     }
+    return;
+  }
+
+  const bringBackBtn = e.target.closest('[data-action="bring-back-history"]');
+  if(bringBackBtn){
+    bringBackFromHistory(bringBackBtn.dataset.key);
     return;
   }
 
