@@ -1962,25 +1962,23 @@ function updateAdminModeUI(){
 }
 // A private sheet (name ending in " — {Person}", e.g. "2 weeks out —
 // Shlomo" or "Presale — Shlomo") is only ever visible to the person it
-// belongs to, or to admin — admin needs broader visibility for
 // A private sheet (name ending in " — {Person}", e.g. "2 weeks out —
 // Shlomo" or "Presale — Shlomo") is only ever visible to the person it
-// belongs to — strictly, no exceptions. There's no more separate admin
-// tier that can see everyone's private sheets for oversight; every
-// logged-in person has the same permissions as everyone else, and that
-// includes the same privacy boundary around their own private data.
-// US Open is the one deliberate exception: always public, no login
-// needed at all. Everything else — an ownerless "template" sheet like
-// the original "2 weeks out" or "Presale" — is visible once you're
-// logged in (as anyone), same as Trash/History/Accounts below; from
-// there you can edit the template directly or clone your own private
-// copy (see openOrCreateMyPrivateCopyOf) if you want isolation from it.
+// belongs to — strictly, no exceptions. US Open is the one deliberate
+// exception: always public, no login needed at all. Everything else —
+// an ownerless "template" sheet like the original "2 weeks out" or
+// "Presale" — is visible once you're logged in (as anyone). Trash no
+// longer exists as a concept at all (deleting now goes straight to
+// History), and neither Trash nor History nor Accounts ever appear as
+// a tab for anyone, including Sam — History is reached only through
+// search (the "Passed shows" section), and Accounts only through the
+// login/add-account flows.
 function sheetVisibleToCurrentUser(sheet){
+  if(sheet.mode === 'trash' || sheet.mode === 'history' || sheet.mode === 'accounts') return false;
   if(sheet.mode === 'usopen') return true;
-  if(sheet.mode === 'trash' || sheet.mode === 'history' || sheet.mode === 'accounts') return adminModeOn;
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
-  return adminModeOn;
+  return !!currentUser;
 }
 // Clearing is normally admin-only, same as every other destructive
 // action — but a private sheet is genuinely yours ("2 weeks out —
@@ -2469,7 +2467,7 @@ insightsBody.addEventListener('click', async e => {
   }
   const deleteBtn = e.target.closest('[data-action="delete-price-history"]');
   if(deleteBtn){
-    if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
+    if(!currentUser){ alert('Log in to delete price history entries.'); return; }
     pushUndo();
     const key = deleteBtn.dataset.key;
     const index = parseInt(deleteBtn.dataset.index, 10);
@@ -2481,7 +2479,7 @@ insightsBody.addEventListener('click', async e => {
   }
   const deleteHistBtn = e.target.closest('[data-action="delete-historical-price-history"]');
   if(deleteHistBtn){
-    if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
+    if(!currentUser){ alert('Log in to delete price history entries.'); return; }
     const key = deleteHistBtn.dataset.key;
     const index = parseInt(deleteHistBtn.dataset.index, 10);
     if(isNaN(index)) return;
@@ -2945,15 +2943,18 @@ confirmArchiveBtn.addEventListener('click', async () => {
   await pushActiveSheetToRemote();
 });
 
-// Bulk delete now matches single-card delete — moves everything
-// selected into Trash instead of destroying it outright, so no passcode
-// needed here either (see deleteSingleEvent for the full reasoning).
+// Bulk delete matches single-card delete — same canDeleteFromSheet
+// gate, same destination (goes straight to History now, no separate
+// Trash step).
 confirmDeleteBtn.addEventListener('click', async () => {
   if(!selectedKeys.size) return;
-  if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
+  if(!canDeleteFromSheet(activeSheet())){
+    alert(activeSheetMode() === 'usopen' ? 'Only Sam can delete from US Open — everyone can still edit it freely.' : 'You can only delete from your own sheet.');
+    return;
+  }
   pushUndo();
   const deletedAt = new Date().toISOString();
-  const toTrash = allEvents.filter(ev => selectedKeys.has(eventKey(ev))).map(ev => {
+  const toHistory = allEvents.filter(ev => selectedKeys.has(eventKey(ev))).map(ev => {
     const ann = getAnnotation(eventKey(ev));
     return { ...ev, note: ann.note || '', rating: ann.rating || 0, pinned: false, sections: ann.sections || [], isNew: false, archived: false, noteHistory: ann.noteHistory || [], priceHistory: ann.priceHistory || [], extraLinks: ann.extraLinks || [], deletedAt, deletedFromSheet: activeSheetName };
   });
@@ -2965,9 +2966,9 @@ confirmDeleteBtn.addEventListener('click', async () => {
   updateSelectModeUI();
   render();
   await pushActiveSheetToRemote();
-  const trash = ensureTrashSheetExists();
-  const existingTrash = remoteCache.filter(r => r.appSheet === trash.name);
-  await pushSheetEvents(trash.name, 'trash', [...existingTrash, ...toTrash]);
+  const hist = ensureHistorySheetExists();
+  const existingHistory = remoteCache.filter(r => r.appSheet === hist.name);
+  await pushSheetEvents(hist.name, 'history', [...existingHistory, ...toHistory]);
 });
 
 const moreMenuToggleBtn = $('#moreMenuToggleBtn');
@@ -3253,6 +3254,7 @@ async function loadAllFromRemote(){
   remoteSheetsList = Array.isArray(data.sheets) ? data.sheets : [];
   loadPeopleFromRemote();
   rebuildSheetsFromCache();
+  await migrateTrashIntoHistory();
   activeSheetName = pickDefaultSheetName();
   {
     const sheet = activeSheet();
@@ -4051,10 +4053,15 @@ function ensureTrashSheetExists(){
 // trash sheet's current contents straight from remoteCache rather than
 // switching activeSheetName to it, so this can run without disturbing
 // whatever sheet you're actually looking at.
-async function moveEventToTrash(trashedEvent){
-  const trash = ensureTrashSheetExists();
-  const existing = remoteCache.filter(r => r.appSheet === trash.name);
-  await pushSheetEvents(trash.name, 'trash', [...existing, trashedEvent]);
+// Deleting now goes straight to History — no separate Trash staging
+// step anymore. One less concept to explain, and it matches how
+// everything else in the app already treats History: the permanent
+// record you find again through search, not a separate place you have
+// to remember to go empty out.
+async function moveEventToHistoryOnDelete(deletedEvent){
+  const hist = ensureHistorySheetExists();
+  const existing = remoteCache.filter(r => r.appSheet === hist.name);
+  await pushSheetEvents(hist.name, 'history', [...existing, deletedEvent]);
 }
 
 // History works exactly like Trash under the hood — same "just another
@@ -4070,6 +4077,25 @@ function ensureHistorySheetExists(){
     sheets.push(hist);
   }
   return hist;
+}
+// One-time cleanup for anyone upgrading from before Trash was retired —
+// Trash used to be a separate staging sheet deletions sat in before
+// either being restored or permanently removed. Now that deleting goes
+// straight to History, any leftover Trash items (from before this
+// change) get folded into History too, rather than being silently
+// orphaned on a sheet nothing can ever show again. Runs once per load;
+// harmless to run again since it just no-ops once Trash is empty.
+async function migrateTrashIntoHistory(){
+  const trashSheet = sheets.find(s => s.mode === 'trash');
+  if(!trashSheet) return;
+  const trashEvents = remoteCache.filter(r => r.appSheet === trashSheet.name);
+  if(trashEvents.length){
+    const hist = ensureHistorySheetExists();
+    const existingHistory = remoteCache.filter(r => r.appSheet === hist.name);
+    await pushSheetEvents(hist.name, 'history', [...existingHistory, ...trashEvents]);
+  }
+  await pushSheetEvents(trashSheet.name, 'trash', []);
+  sheets = sheets.filter(s => s.mode !== 'trash');
 }
 
 // Archives a whole sheet's worth of events in one batch (used by Clear
@@ -4190,37 +4216,53 @@ async function clearActiveSheetEvents(){
   await pushActiveSheetToRemote();
 }
 
+// Delete permissions, by sheet type: your own private sheet is fully
+// yours to clean up freely; US Open is the one sheet only Sam can
+// delete from (though anyone logged in can still edit it — this is
+// specifically about removal); a shared/template sheet (not anyone's
+// private copy, not US Open) is deletable by anyone logged in, same as
+// editing it already was.
+function canDeleteFromSheet(sheet){
+  if(!sheet || !currentUser) return false;
+  if(sheet.mode === 'usopen') return currentUser === 'Sam';
+  const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
+  if(privateMatch) return currentUser === privateMatch[2];
+  return true;
+}
 // Removes a single event (and its note/rating/pin/prices) — from the
 // active sheet normally, or from its actual home sheet if it's a
-// cross-sheet search result.
-// "Delete" now means "move to Trash" — no passcode needed anymore,
-// since this is fully reversible from inside the Trash sheet (unlike
-// the old behavior, which destroyed the event and its notes outright).
-// The passcode instead guards the one truly irreversible action:
-// permanentlyDeleteFromTrash, below.
+// cross-sheet search result. Goes straight to History — no separate
+// Trash step, and no passcode either; canDeleteFromSheet (checked by
+// every caller before this runs) is the actual gate now.
 async function deleteSingleEvent(key){
   const inActive = allEvents.find(e => eventKey(e) === key);
   if(inActive){
+    if(!canDeleteFromSheet(activeSheet())){
+      alert(activeSheetMode() === 'usopen' ? 'Only Sam can delete from US Open — everyone can still edit it freely.' : 'You can only delete from your own sheet.');
+      return;
+    }
     pushUndo();
     const ann = getAnnotation(key);
-    const trashedEvent = { ...inActive, note: ann.note || '', rating: ann.rating || 0, pinned: false, sections: ann.sections || [], isNew: false, archived: false, noteHistory: ann.noteHistory || [], priceHistory: ann.priceHistory || [], extraLinks: ann.extraLinks || [], deletedAt: new Date().toISOString(), deletedFromSheet: activeSheetName };
+    const historyEvent = { ...inActive, note: ann.note || '', rating: ann.rating || 0, pinned: false, sections: ann.sections || [], isNew: false, archived: false, noteHistory: ann.noteHistory || [], priceHistory: ann.priceHistory || [], extraLinks: ann.extraLinks || [], deletedAt: new Date().toISOString(), deletedFromSheet: activeSheetName };
     allEvents = allEvents.filter(e => eventKey(e) !== key);
     delete annotations[key];
     if(openNotesKey === key){ openNotesKey = null; noteSnapshotOnOpen = null; }
     render();
     await pushActiveSheetToRemote();
-    await moveEventToTrash(trashedEvent);
+    await moveEventToHistoryOnDelete(historyEvent);
     return;
   }
   if(!searchAnnotationsMap || !searchAnnotationsMap.has(key)) return;
   const entry = searchAnnotationsMap.get(key);
-  const trashedEvent = { ...entry.ev, note: entry.ann.note || '', rating: entry.ann.rating || 0, pinned: false, sections: entry.ann.sections || [], isNew: false, archived: false, noteHistory: entry.ann.noteHistory || [], priceHistory: entry.ann.priceHistory || [], extraLinks: entry.ann.extraLinks || [], deletedAt: new Date().toISOString(), deletedFromSheet: entry.sheetName };
+  const entrySheet = sheets.find(s => s.name === entry.sheetName);
+  if(!canDeleteFromSheet(entrySheet)) return;
+  const historyEvent = { ...entry.ev, note: entry.ann.note || '', rating: entry.ann.rating || 0, pinned: false, sections: entry.ann.sections || [], isNew: false, archived: false, noteHistory: entry.ann.noteHistory || [], priceHistory: entry.ann.priceHistory || [], extraLinks: entry.ann.extraLinks || [], deletedAt: new Date().toISOString(), deletedFromSheet: entry.sheetName };
   searchAnnotationsMap.delete(key);
   remoteCache = remoteCache.filter(r => eventKey(r) !== key);
   if(openNotesKey === key){ openNotesKey = null; noteSnapshotOnOpen = null; }
   render();
   await pushCrossSheetEventEdit(entry.sheetName);
-  await moveEventToTrash(trashedEvent);
+  await moveEventToHistoryOnDelete(historyEvent);
 }
 
 // "Release" is deliberately a different action from Delete, not just a
@@ -4311,57 +4353,25 @@ async function bringBackFromHistory(key){
   render();
 }
 
-// Puts a trashed event back on whatever sheet it came from, with its
-// note/sections/history all still intact (they were never touched while
-// it sat in the trash — restoring is just moving the same object back).
-// If that original sheet no longer exists (renamed or deleted since),
-// asks which sheet to restore into instead rather than silently
-// dropping it somewhere unexpected.
-// Operates directly on remoteCache/pushSheetEvents rather than assuming
-// Trash is the currently active sheet — it needs to work correctly when
-// triggered from a search result too (see search-restore-trash), not
-// only from inside the Trash tab itself, and allEvents only ever holds
-// whatever sheet is actively open.
-async function restoreFromTrash(key){
-  const trashSheet = sheets.find(s => s.mode === 'trash');
-  if(!trashSheet) return;
-  const trashEvents = remoteCache.filter(r => r.appSheet === trashSheet.name);
-  const ev = trashEvents.find(e => eventKey(e) === key);
-  if(!ev) return;
-  let targetSheet = sheets.find(s => s.name === ev.deletedFromSheet && s.mode !== 'trash');
-  if(!targetSheet){
-    const names = sheets.filter(s => s.mode !== 'trash' && s.mode !== 'history' && s.mode !== 'accounts').map(s => s.name);
-    const typed = prompt(`"${ev.deletedFromSheet || 'that sheet'}" doesn't exist anymore. Restore to which sheet?\n\n${names.join(', ')}`, names[0] || '');
-    if(typed === null) return;
-    targetSheet = sheets.find(s => s.name === typed.trim());
-    if(!targetSheet){ alert('No sheet with that name — nothing was restored.'); return; }
-  }
+// The actual point of no return — permanently removes an event from
+// History. Operates directly on remoteCache/pushSheetEvents (not
+// allEvents), since this needs to work when triggered from a search
+// result regardless of which sheet is currently active — History
+// itself never has its own visible tab to be "the active sheet" at
+// all. No confirm() dialog on top of the permission check itself
+// (canPermanentlyDeleteHistoryItem, already checked by the button's own
+// render condition before this ever runs) — that ownership check is
+// already the deliberate gate here, same reasoning as everywhere else
+// permanent deletion happens in this app.
+async function permanentlyDeleteFromHistory(key){
+  const histSheet = sheets.find(s => s.mode === 'history');
+  if(!histSheet) return;
+  const histEvents = remoteCache.filter(r => r.appSheet === histSheet.name);
+  const ev = histEvents.find(e => eventKey(e) === key);
+  if(!ev || !canPermanentlyDeleteHistoryItem(ev)) return;
   pushUndo();
-  const remainingTrash = trashEvents.filter(e => eventKey(e) !== key);
-  await pushSheetEvents(trashSheet.name, 'trash', remainingTrash);
-  const restoredEvent = { ...ev, isNew: false, archived: false };
-  delete restoredEvent.deletedAt;
-  delete restoredEvent.deletedFromSheet;
-  const targetExisting = remoteCache.filter(r => r.appSheet === targetSheet.name);
-  await pushSheetEvents(targetSheet.name, targetSheet.mode, [...targetExisting, restoredEvent]);
-  if(activeSheetName === trashSheet.name || activeSheetName === targetSheet.name) syncActiveSheetFromCache();
-  render();
-}
-
-// The actual point of no return — permanently removes an event from the
-// Trash sheet. Same reasoning as restoreFromTrash above for operating
-// on remoteCache directly instead of allEvents — this needs to work
-// when triggered from a search result on any sheet, not only from
-// inside the Trash tab. No separate passcode prompt here either, for
-// the same reason as clearActiveSheetEvents above — admin mode is
-// already checked at every call site before this ever runs.
-async function permanentlyDeleteFromTrash(key){
-  const trashSheet = sheets.find(s => s.mode === 'trash');
-  if(!trashSheet) return;
-  pushUndo();
-  const remaining = remoteCache.filter(r => r.appSheet === trashSheet.name && eventKey(r) !== key);
-  await pushSheetEvents(trashSheet.name, 'trash', remaining);
-  if(activeSheetName === trashSheet.name) syncActiveSheetFromCache();
+  const remaining = histEvents.filter(e => eventKey(e) !== key);
+  await pushSheetEvents(histSheet.name, 'history', remaining);
   render();
 }
 
@@ -4591,7 +4601,6 @@ document.addEventListener('keydown', e => {
     return;
   }
   if(e.key === 'Delete' || e.key === 'x'){
-    if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
     deleteSingleEvent(selectedKey);
     return;
   }
@@ -5317,19 +5326,16 @@ function renderSearchResults(query){
   });
 
   // A history sheet's snapshot inherits whatever note/sections/pinned
-  // the show had at the moment it was cleared/released — same as any
-  // live event — so the exact same matchesSearch check (name, venue,
-  // note text) works here unchanged; only the sheet-mode filter differs.
-  const historicalMatched = events.filter(ev => ev.__mode === 'history' && matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann));
-  // Trash's own tab is hidden from everyday use now (only shows up
-  // once logged in) — search is how a deleted show stays findable
-  // without needing that tab back. Same matchesSearch check again; only
-  // the sheet-mode differs from the two filters above. Same "not
-  // someone else's private sheet" check as syncActiveSheetFromCache
-  // applies here too — search must not leak a deletion from someone
-  // else's private sheet just because it happens to match the query.
-  const trashMatched = events.filter(ev => {
-    if(ev.__mode !== 'trash') return false;
+  // the show had at the moment it was cleared/released/deleted — same
+  // as any live event — so the exact same matchesSearch check (name,
+  // venue, note text) works here unchanged; only the sheet-mode filter
+  // differs. Same "not someone else's private sheet" check
+  // syncActiveSheetFromCache used to apply just to Trash now applies
+  // here directly, since deleting goes straight to History now — a
+  // deletion from someone's private sheet must not surface for anyone
+  // but that person just because it happens to match the query.
+  const historicalMatched = events.filter(ev => {
+    if(ev.__mode !== 'history') return false;
     const privateMatch = (ev.deletedFromSheet || '').match(/^(.+) — (.+)$/);
     if(privateMatch && currentUser !== privateMatch[2]) return false;
     return matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann);
@@ -5337,7 +5343,7 @@ function renderSearchResults(query){
 
   countLabel.textContent = `${matched.length} match${matched.length === 1 ? '' : 'es'} across all sheets`;
 
-  if(!matched.length && !historicalMatched.length && !trashMatched.length){
+  if(!matched.length && !historicalMatched.length){
     listRoot.innerHTML = searchNoResultsHtml(query, events);
     return;
   }
@@ -5376,18 +5382,29 @@ function renderSearchResults(query){
   if(historicalMatched.length){
     html += historySearchSectionHtml(historicalMatched);
   }
-  if(trashMatched.length){
-    html += trashSearchSectionHtml(trashMatched);
-  }
   listRoot.innerHTML = html;
 }
-// The bottom-of-search History section — this is what replaced the old
-// standalone "View history" menu item. Browsing history for its own
-// sake wasn't something anyone actually needed; what's actually useful
-// is finding it exactly when you're already looking for a specific
-// artist, right alongside whatever's currently live for them. Each past
-// show keeps its old note and code visible, and can be brought back
-// onto a real sheet with one click if it's relevant again.
+// The bottom-of-search "Passed shows" section — this is what replaced
+// the old standalone "View history" menu item (and, now, Trash too).
+// Browsing history for its own sake wasn't something anyone actually
+// needed; what's actually useful is finding it exactly when you're
+// already looking for a specific artist, right alongside whatever's
+// currently live for them. Each past show keeps its old note and code
+// visible, can be brought back onto a real sheet with one click, or
+// permanently removed — scoped the same way regular deleting is: your
+// own stuff is always yours to permanently clear, US Open only Sam can
+// remove (though again, this is specifically about deleting — anyone
+// can still browse and bring back a US Open show), and a shared/
+// template sheet's history is anyone logged in.
+function canPermanentlyDeleteHistoryItem(ev){
+  if(!currentUser) return false;
+  const deletedFrom = ev.deletedFromSheet || '';
+  const sheetObj = sheets.find(s => s.name === deletedFrom);
+  if((sheetObj && sheetObj.mode === 'usopen') || deletedFrom === 'US Open') return currentUser === 'Sam';
+  const privateMatch = deletedFrom.match(/^(.+) — (.+)$/);
+  if(privateMatch) return currentUser === privateMatch[2];
+  return true;
+}
 function historySearchSectionHtml(historicalMatched){
   const sorted = [...historicalMatched].sort((a, b) => new Date(b.dateObj || 0) - new Date(a.dateObj || 0));
   const rows = sorted.map(ev => {
@@ -5407,44 +5424,12 @@ function historySearchSectionHtml(historicalMatched){
       ${sections.length ? `<div class="history-search-sections">${sections.map(s => `<span class="history-section-chip">${escapeHtml(s.label || '')} ${escapeHtml(s.price ? '$' + s.price : '')}</span>`).join('')}</div>` : ''}
       <div class="history-search-restore-row">
         <button type="button" class="history-search-restore-btn" data-action="bring-back-history" data-key="${escapeHtml(key)}" title="Add this back onto a regular sheet — its code, notes, and prices come with it">↺ Bring back</button>
+        ${canPermanentlyDeleteHistoryItem(ev) ? `<button type="button" class="history-search-delete-btn" data-action="delete-history-forever" data-key="${escapeHtml(key)}" title="Permanently delete — there is no way to get this back after this">🗑 Delete forever</button>` : ''}
       </div>
     </div>`;
   }).join('');
   return `
-    <p class="notes-label" style="margin:24px 20px 8px;">📜 History (${historicalMatched.length})</p>
-    <div class="history-search-list">${rows}</div>`;
-}
-// Trash's own tab is now hidden outside admin mode — this is how a
-// deleted show stays findable at all without it. Restore works for
-// anyone (it's the safe direction — putting a show back is never
-// destructive), while Delete forever only shows up once admin mode is
-// unlocked, same rule as everywhere else permanent deletion lives. No
-// confirm() dialog on top of that: unlocking admin mode in the first
-// place is already the deliberate, hard-to-reach gate here, and this is
-// specifically meant to be the fast, low-friction path once you're in
-// it — a second "are you sure" on every single item would undercut the
-// whole point of making admin mode the focused place to clean things up.
-function trashSearchSectionHtml(trashMatched){
-  const sorted = [...trashMatched].sort((a, b) => new Date(b.deletedAt || 0) - new Date(a.deletedAt || 0));
-  const rows = sorted.map(ev => {
-    const key = eventKey(ev);
-    const dateStr = ev.dateObj ? new Date(ev.dateObj).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-    const deletedWhen = ev.deletedAt ? new Date(ev.deletedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-    return `<div class="history-search-row">
-      <div class="history-search-main">
-        <span class="history-search-name">${escapeHtml(ev.name || '')}</span>
-        ${dateStr ? `<span class="history-search-date">${escapeHtml(dateStr)}</span>` : ''}
-      </div>
-      <div class="history-search-venue">${escapeHtml(ev.venue || '')}</div>
-      ${deletedWhen ? `<div class="history-search-note">🗑 Deleted ${escapeHtml(deletedWhen)}${ev.deletedFromSheet ? ' from ' + escapeHtml(ev.deletedFromSheet) : ''}</div>` : ''}
-      <div class="history-search-restore-row">
-        <button type="button" class="history-search-restore-btn" data-action="search-restore-trash" data-key="${escapeHtml(key)}" title="Put this back on the sheet it was deleted from">↺ Restore</button>
-        ${adminModeOn ? `<button type="button" class="history-search-delete-btn" data-action="search-delete-forever" data-key="${escapeHtml(key)}" title="Permanently delete — there is no way to get this back after this">🗑 Delete forever</button>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-  return `
-    <p class="notes-label" style="margin:24px 20px 8px;">🗑 Trash (${trashMatched.length})</p>
+    <p class="notes-label" style="margin:24px 20px 8px;">📜 Passed shows (${historicalMatched.length})</p>
     <div class="history-search-list">${rows}</div>`;
 }
 
@@ -5814,36 +5799,6 @@ function cardHtmlStandard(ev){
   const ann = getAnnotation(key);
   const isOpen = key === openNotesKey;
   const isSelected = selectMode && selectedKeys.has(key);
-
-  // Trash cards are deliberately NOT editable in place — no pin, no
-  // notes panel, no price chips — since the whole point is "this is on
-  // its way out, look at it and decide: bring it back, or let it go for
-  // good." Restoring puts it back exactly where it was (including its
-  // note/sections/history, all still intact underneath), so nothing
-  // about the item is actually lost by having sat in the trash.
-  if(activeSheetMode() === 'trash'){
-    const deletedWhen = ev.deletedAt ? new Date(ev.deletedAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) + ' at ' + new Date(ev.deletedAt).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'}) : '';
-    return `
-    <div class="ticket mode-standard is-trashed ${isSelected ? 'is-selected' : ''}" data-key="${escapeHtml(key)}">
-      ${selectMode ? `<button type="button" class="select-check ${isSelected ? 'checked' : ''}" data-action="select" data-key="${escapeHtml(key)}" aria-label="Select"></button>` : ''}
-      <div class="ticket-header-row">
-        ${dateHeadline ? `<div class="card-date-badge" title="${escapeHtml(dateHeadline.fullLabel)}">${escapeHtml(dateHeadline.datePart)}<span class="badge-time">${escapeHtml(dateHeadline.timePart)}</span></div>` : '<div></div>'}
-      </div>
-      <div class="ticket-body">
-        <div class="ticket-main">
-          <div class="ticket-info">
-            <div class="ev-name">${escapeHtml(ev.name)}</div>
-            <div class="ev-venue">${escapeHtml(ev.venue)}</div>
-            ${deletedWhen ? `<div class="trash-meta">Deleted ${escapeHtml(deletedWhen)} from ${escapeHtml(ev.deletedFromSheet || 'a sheet that no longer exists')}</div>` : ''}
-          </div>
-        </div>
-        <div class="trash-action-row">
-          <button type="button" class="trash-restore-btn" data-action="restore-trash" data-key="${escapeHtml(key)}">↺ Restore</button>
-          ${adminModeOn ? `<button type="button" class="trash-forever-btn" data-action="delete-forever" data-key="${escapeHtml(key)}">🗑 Delete forever</button>` : ''}
-        </div>
-      </div>
-    </div>`;
-  }
 
   return `
     <div class="ticket mode-standard ${ann.pinned ? 'is-pinned' : ''} ${ann.isNew ? 'is-new' : ''} ${ann.rating ? 'is-starred' : ''} ${isSelected ? 'is-selected' : ''}" data-key="${escapeHtml(key)}">
@@ -6520,7 +6475,7 @@ function notesPanelHtml(key, ann, ev, showPresaleFields = false){
       <div class="panel-action-row">
         ${showPresaleFields ? `<button type="button" class="panel-release-btn" data-action="release-presale" data-key="${escapeHtml(key)}" title="Move this off the active presale list and onto a regular sheet — its code, notes, and prices all come with it">↗ Release</button>` : ''}
         <button type="button" class="panel-archive-btn" data-action="archive" data-key="${escapeHtml(key)}">${ann.archived ? '📤 Unarchive' : '📦 Archive'}</button>
-        ${adminModeOn ? `<button type="button" class="panel-delete-btn" data-action="delete" data-key="${escapeHtml(key)}">🗑 Delete</button>` : ''}
+        ${canDeleteFromSheet(activeSheet()) ? `<button type="button" class="panel-delete-btn" data-action="delete" data-key="${escapeHtml(key)}">🗑 Delete</button>` : ''}
       </div>
     </div>`;
 }
@@ -7397,39 +7352,13 @@ listRoot.addEventListener('click', async e => {
   // Delete a single event.
   const deleteBtn = e.target.closest('[data-action="delete"]');
   if(deleteBtn){
-    if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
     deleteSingleEvent(deleteBtn.dataset.key);
     return;
   }
 
-  const restoreTrashBtn = e.target.closest('[data-action="restore-trash"]');
-  if(restoreTrashBtn){
-    restoreFromTrash(restoreTrashBtn.dataset.key);
-    return;
-  }
-
-  const deleteForeverBtn = e.target.closest('[data-action="delete-forever"]');
-  if(deleteForeverBtn){
-    if(!adminModeOn){ alert('Permanent deletion requires admin mode — unlock it from the "..." menu.'); return; }
-    // No confirm() here on purpose — unlocking admin mode is already
-    // the deliberate, hard-to-reach gate for this; a second "are you
-    // sure" on every single item would work against making this the
-    // fast, low-friction way to actually clear trash out once you're
-    // in that mode, which is the whole point of it.
-    permanentlyDeleteFromTrash(deleteForeverBtn.dataset.key);
-    return;
-  }
-
-  const searchRestoreBtn = e.target.closest('[data-action="search-restore-trash"]');
-  if(searchRestoreBtn){
-    restoreFromTrash(searchRestoreBtn.dataset.key);
-    return;
-  }
-
-  const searchDeleteForeverBtn = e.target.closest('[data-action="search-delete-forever"]');
-  if(searchDeleteForeverBtn){
-    if(!adminModeOn){ alert('Permanent deletion requires admin mode — unlock it from the "..." menu.'); return; }
-    permanentlyDeleteFromTrash(searchDeleteForeverBtn.dataset.key);
+  const deleteHistForeverBtn = e.target.closest('[data-action="delete-history-forever"]');
+  if(deleteHistForeverBtn){
+    permanentlyDeleteFromHistory(deleteHistForeverBtn.dataset.key);
     return;
   }
 
@@ -7528,7 +7457,7 @@ listRoot.addEventListener('click', async e => {
   // it like any other edit.
   const deletePriceHistoryBtn = e.target.closest('[data-action="delete-price-history"]');
   if(deletePriceHistoryBtn){
-    if(!adminModeOn){ alert('Deleting requires admin mode — unlock it from the "..." menu.'); return; }
+    if(!currentUser){ alert('Log in to delete price history entries.'); return; }
     pushUndo();
     const key = deletePriceHistoryBtn.dataset.key;
     const index = parseInt(deletePriceHistoryBtn.dataset.index, 10);
