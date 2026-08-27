@@ -1283,13 +1283,21 @@
   .history-search-note{font-size:12px;color:var(--text);opacity:.85;margin-top:8px;white-space:pre-wrap;}
   .history-search-sections{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
   .history-search-restore-btn{
-    position:absolute;top:12px;right:14px;
+    position:static;
     font-family:'Inter',sans-serif;font-size:11.5px;font-weight:600;
     padding:6px 10px;border-radius:7px;
     border:1px solid var(--hairline);background:var(--card);color:var(--teal);
     cursor:pointer;transition:border-color .15s ease,background .15s ease;
   }
   .history-search-restore-btn:hover{border-color:var(--teal);background:rgba(79,200,191,.08);}
+  .history-search-restore-row{position:absolute;top:12px;right:14px;display:flex;gap:6px;}
+  .history-search-delete-btn{
+    font-family:'Inter',sans-serif;font-size:11.5px;font-weight:600;
+    padding:6px 10px;border-radius:7px;
+    border:1px solid rgba(255,107,106,.35);background:var(--card);color:var(--coral);
+    cursor:pointer;transition:border-color .15s ease,background .15s ease;
+  }
+  .history-search-delete-btn:hover{border-color:var(--coral);background:rgba(255,107,106,.1);}
   .insights-shows-list{
     display:flex;flex-direction:column;gap:4px;margin-bottom:4px;
     max-height:140px;overflow-y:auto;
@@ -1630,7 +1638,7 @@
   <div class="header-inner">
     <div class="title-block">
       <p class="eyebrow" id="eyebrowLabel">Ticket Watch</p>
-      <h1>Ticket Watch <span class="count" id="countLabel"></span> <span class="admin-badge" id="adminBadge" style="display:none;">🔓 ADMIN</span></h1>
+      <h1>Ticket Watch <span class="count" id="countLabel"></span> <span class="admin-badge" id="adminBadge" style="display:none;"></span></h1>
     </div>
     <div class="toolbar">
       <div class="search-wrap">
@@ -1682,7 +1690,8 @@
           <button class="menu-row-btn" id="clearPastBtn" title="Remove events dated before today">🗑 Clear past</button>
           <button class="menu-row-btn" id="clearBtn" style="display:none;">🗑 Clear data</button>
           <button class="menu-row-btn" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
-          <button class="menu-row-btn" id="adminModeBtn" title="Unlocks delete, clear, and permanent-removal actions. Everyday edits (notes, star, pin, codes, prices) never need this.">🔒 Admin mode</button>
+          <button class="menu-row-btn" id="adminModeBtn" title="Log in with your passcode. Everyday edits (notes, star, pin, codes, prices) never need this — it's only for admin actions and your own private copies.">👤 Log in</button>
+          <button class="menu-row-btn" id="addAccountBtn" style="display:none;" title="Create a new named login for someone else — their own passcode, their own private sheets">➕ Add account</button>
           <div class="menu-row-divider"></div>
           <p class="notes-label">Keyboard shortcuts</p>
           <div class="shortcuts-list">
@@ -1915,34 +1924,104 @@ const closeInsightsBtn = $('#closeInsightsBtn');
 const adminModeBtn = $('#adminModeBtn');
 const adminBadge = $('#adminBadge');
 function updateAdminModeUI(){
-  adminBadge.style.display = adminModeOn ? 'inline' : 'none';
-  adminModeBtn.textContent = adminModeOn ? '🔓 Admin mode (on) — click to lock' : '🔒 Admin mode';
-  adminModeBtn.classList.toggle('active', adminModeOn);
+  adminBadge.style.display = currentUser ? 'inline' : 'none';
+  adminBadge.textContent = currentUser ? `👤 ${currentUser.toUpperCase()}${adminModeOn ? ' · ADMIN' : ''}` : '';
+  adminModeBtn.textContent = currentUser ? `👤 ${currentUser} — click to log out` : '👤 Log in';
+  adminModeBtn.classList.toggle('active', !!currentUser);
   clearPastBtn.style.display = adminModeOn ? 'block' : 'none';
+  const addAccountBtn = $('#addAccountBtn');
+  if(addAccountBtn) addAccountBtn.style.display = adminModeOn ? 'block' : 'none';
   // Showing "Delete or x → Delete card" in the shortcuts list to
   // someone who can't actually use it (they'd just get the "requires
   // admin mode" alert) is misleading — it should only be listed when
   // it's genuinely available.
   const deleteShortcutRow = $('#deleteShortcutRow');
   if(deleteShortcutRow) deleteShortcutRow.style.display = adminModeOn ? 'block' : 'none';
+  // Trash's tab only shows while admin mode is on — if it gets locked
+  // while Trash happens to be the active sheet, staying there would
+  // leave the tab bar with nothing highlighted (the active tab just
+  // disappeared) and no obvious way back. Switching to the first
+  // regular sheet keeps that from ever being a dead end. A private
+  // presale sheet that's no longer visible to whoever's now logged in
+  // (or logged out) is the same situation, same fix.
+  if(activeSheet() && !sheetVisibleToCurrentUser(activeSheet())){
+    const fallback = sheets.find(s => sheetVisibleToCurrentUser(s) && s.mode !== 'trash' && s.mode !== 'history' && s.mode !== 'accounts');
+    if(fallback) setActiveSheet(fallback.name);
+  }
+}
+// A private sheet (name ending in " — {Person}", e.g. "2 weeks out —
+// Shlomo" or "Presale — Shlomo") is only ever visible to the person it
+// belongs to, or to admin — admin needs broader visibility for
+// oversight ("admin can delete stuff" implies seeing what's there to
+// manage, not just their own). US Open is the one deliberate exception:
+// always public, no login needed at all. Everything else — an
+// ownerless "template" sheet like the original "2 weeks out" or
+// "Presale" — is admin-only to view/edit directly; anyone else works
+// from their own private copy instead (see openOrCreateMyPrivateCopyOf
+// below), cloned from the template rather than editing it directly.
+function sheetVisibleToCurrentUser(sheet){
+  if(sheet.mode === 'usopen') return true;
+  if(sheet.mode === 'trash' || sheet.mode === 'history' || sheet.mode === 'accounts') return adminModeOn;
+  const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
+  if(privateMatch) return adminModeOn || currentUser === privateMatch[2];
+  return adminModeOn;
+}
+// Clearing is normally admin-only, same as every other destructive
+// action — but a private sheet is genuinely yours ("2 weeks out —
+// Shlomo" isn't shared with anyone), and presale specifically changes
+// every day, so waiting on admin just to start it over each day would
+// be exactly the wrong kind of friction. The owner of a private sheet
+// can clear their own without needing admin; a shared/template sheet
+// (or anyone else's private one) still requires it.
+function canClearActiveSheet(){
+  if(adminModeOn) return true;
+  const sheet = activeSheet();
+  if(!sheet) return false;
+  const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
+  return !!privateMatch && currentUser === privateMatch[2];
 }
 adminModeBtn.addEventListener('click', () => {
   moreMenuPopover.classList.remove('open');
-  if(adminModeOn){
+  if(currentUser){
+    currentUser = null;
     adminModeOn = false;
     updateAdminModeUI();
+    renderTabs();
     render();
     return;
   }
-  const entered = prompt('Enter the admin passcode to unlock delete, clear, and permanent-removal actions:');
+  const entered = prompt('Enter your passcode:');
   if(entered === null) return;
-  if(entered.trim() === ADMIN_PASSCODE){
-    adminModeOn = true;
+  const person = PEOPLE.find(p => p.passcode === entered.trim());
+  if(person){
+    currentUser = person.name;
+    adminModeOn = person.isAdmin;
     updateAdminModeUI();
+    renderTabs();
     render();
   } else {
     alert('Incorrect passcode.');
   }
+});
+const addAccountBtn = $('#addAccountBtn');
+addAccountBtn.addEventListener('click', async () => {
+  moreMenuPopover.classList.remove('open');
+  if(!adminModeOn) return;
+  const name = prompt('Name for the new account:');
+  if(name === null || !name.trim()) return;
+  if(PEOPLE.some(p => p.name.toLowerCase() === name.trim().toLowerCase())){
+    alert('An account with that name already exists.');
+    return;
+  }
+  const passcode = prompt(`Passcode for ${name.trim()}:`);
+  if(passcode === null || !passcode.trim()) return;
+  if(PEOPLE.some(p => p.passcode === passcode.trim())){
+    alert('That passcode is already in use by another account — pick a different one.');
+    return;
+  }
+  const isAdmin = confirm(`Should ${name.trim()} also have admin access (can delete, clear sheets, and see everyone's private sheets)?\n\nOK = yes, admin. Cancel = no, regular account.`);
+  await saveNewAccount(name.trim(), passcode.trim(), isAdmin);
+  alert(`${name.trim()}'s account is ready — they can log in with their passcode from the "..." menu.`);
 });
 const calculatorModal = $('#calculatorModal');
 // "+ Add show" — a fast path for a single show without needing a whole
@@ -2434,17 +2513,55 @@ function savePinnedJumpNames(){
 }
 let pinnedJumpNames = loadPinnedJumpNames();
 let openNotesKey = null; // eventKey of the one card whose notes panel is expanded, if any
-// Admin mode gates every destructive action (delete a card, clear a
-// whole sheet, permanently remove something from Trash or History,
-// delete a price-history entry, close a sheet tab) behind a single
-// passcode — anyone without it can still do all the everyday stuff
-// (notes, star, pin, codes, prices, archive/restore) freely, since none
-// of that can actually lose data. Deliberately NOT persisted to
-// localStorage: it resets to locked on every reload, so leaving the tab
-// open on a shared computer doesn't leave admin actions sitting
-// unlocked indefinitely.
+// One login flow covers both "who is this" and "does this unlock admin
+// actions" — Sam's passcode is deliberately the same as admin's, since
+// Sam effectively IS the admin account with a name on it rather than a
+// separate thing. Logging in as Sam sets both currentUser AND
+// adminModeOn; logging in as anyone else sets currentUser only.
+// Deliberately NOT persisted to localStorage, same reasoning as before
+// admin mode had a name attached to it: resets to logged-out on every
+// reload, so a shared/left-open tab never sits unlocked indefinitely.
+//
+// PEOPLE itself lives on a dedicated, hidden "🔑 Accounts" sheet on the
+// Google Sheet backend (see loadPeopleFromRemote/savePeopleToRemote) —
+// not hardcoded here — so admin can add a new person (a new
+// name+passcode) directly from the app and it's there for everyone on
+// the next load, the same way any other data in this app syncs. This
+// array is just the in-memory copy, seeded with the three original
+// accounts as a fallback for the very first load before the Accounts
+// sheet exists yet.
+let PEOPLE = [
+  { name: 'Sam', passcode: '2121', isAdmin: true },
+  { name: 'Shlomo', passcode: '7032', isAdmin: false },
+  { name: 'Eitan', passcode: '0000', isAdmin: false }
+];
+let currentUser = null; // one of PEOPLE's names, or null if nobody's logged in
+const ACCOUNTS_SHEET_NAME = '🔑 Accounts';
+// Reads whatever's on the Accounts sheet (if it exists yet) and uses
+// that instead of the hardcoded three-person default above — this is
+// what makes "add account" actually persist across reloads and across
+// whoever else opens this page, the same way every other bit of data
+// in the app syncs through the same Google Sheet.
+function loadPeopleFromRemote(){
+  const accountRows = remoteCache.filter(r => r.appSheet === ACCOUNTS_SHEET_NAME);
+  if(!accountRows.length) return;
+  const loaded = accountRows
+    .map(r => ({ name: (r.name || '').trim(), passcode: String(r.passcode || '').trim(), isAdmin: r.isAdmin === true || r.isAdmin === 'true' }))
+    .filter(p => p.name && p.passcode);
+  if(loaded.length) PEOPLE = loaded;
+}
+// Admin-only — adding an account is the one piece of this whole system
+// that's genuinely sensitive (a new passcode is a new way into
+// everything that account can reach), so it stays behind the same gate
+// as every other admin action rather than being open to anyone logged
+// in. Rewrites the whole Accounts sheet with the updated list, same
+// replace-the-tab mechanism every other sheet edit in this app uses.
+async function saveNewAccount(name, passcode, isAdmin){
+  PEOPLE = [...PEOPLE, { name, passcode, isAdmin }];
+  const rows = PEOPLE.map(p => ({ name: p.name, passcode: p.passcode, isAdmin: p.isAdmin }));
+  await pushSheetEvents(ACCOUNTS_SHEET_NAME, 'accounts', rows);
+}
 let adminModeOn = false;
-const ADMIN_PASSCODE = '2121';
 let noteSnapshotOnOpen = null; // ann.note captured when the panel opened, so closing can tell if it actually changed
 let historyExpandedKeys = new Set(); // keys whose note-history list is currently expanded
 let archiveOnly = false; // filter: show only archived events instead of hiding them
@@ -2985,7 +3102,7 @@ function pickDefaultSheetName(){
   // ever be picked as what greets you on load — that's exactly the
   // "shouldn't show up during daily use" idea this whole feature exists
   // to protect.
-  const normal = sheets.filter(s => s.mode !== 'trash' && s.mode !== 'history');
+  const normal = sheets.filter(s => s.mode !== 'trash' && s.mode !== 'history' && s.mode !== 'accounts');
   return normal.length ? normal[0].name : (sheets.length ? sheets[0].name : null);
 }
 
@@ -3062,6 +3179,7 @@ async function loadAllFromRemote(){
   }
   remoteCache = data.events;
   remoteSheetsList = Array.isArray(data.sheets) ? data.sheets : [];
+  loadPeopleFromRemote();
   rebuildSheetsFromCache();
   activeSheetName = pickDefaultSheetName();
   {
@@ -3368,6 +3486,25 @@ function parseEventDate(str){
     if(ampm.toUpperCase() === 'PM' && h !== 12) h += 12;
     if(ampm.toUpperCase() === 'AM' && h === 12) h = 0;
     return new Date(parseInt(year,10), monthIdx, parseInt(day,10), h, parseInt(minute,10));
+  }
+
+  // e.g. "Wed • Sep 02, 2026 • 11:30 AM" — the exact style Ticketmaster's
+  // own event pages display a date in, bullet-separated instead of using
+  // the word "at". Handles both the true bullet character (•) and a
+  // middle-dot (·), since copy-pasting from different sources/fonts can
+  // yield either visually-similar-but-different Unicode character for
+  // what reads as the same separator to a person. Day-of-week prefix is
+  // optional, same reasoning as the no-year pattern further below.
+  m = str.match(/^(?:[A-Za-z]{3,9}\s*[•·]\s*)?([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\s*[•·]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if(m){
+    const [, monthName, day, year, hour, minute, ampm] = m;
+    const monthIdx = monthNameToIndex(monthName);
+    if(monthIdx !== -1){
+      let h = parseInt(hour,10);
+      if(ampm.toUpperCase() === 'PM' && h !== 12) h += 12;
+      if(ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+      return new Date(parseInt(year,10), monthIdx, parseInt(day,10), h, parseInt(minute,10));
+    }
   }
 
   // e.g. "Sunday, 8/30, 12:00 PM" — no year given, so infer one.
@@ -3959,10 +4096,12 @@ async function handleCsvUpload(file, text){
 // without really registering what it does. Also archives everything
 // into History first (see archiveSheetSnapshot) before wiping, so
 // "clear" now means "start fresh AND keep a snapshot of what this
-// looked like", not just "delete everything".
+// looked like", not just "delete everything". No separate passcode
+// prompt here anymore — every path that calls this already checks
+// adminModeOn first, and that's now the one deliberate gate for every
+// destructive action in the app; stacking a second, different passcode
+// on top of it was redundant friction, not extra safety.
 async function clearActiveSheetEvents(){
-  const ok = await requestDeletePasscode(`Enter the passcode to clear all events on "${activeSheetName}"`);
-  if(!ok) return;
   pushUndo();
   if(allEvents.length){
     const clearedAt = new Date().toISOString();
@@ -4025,6 +4164,51 @@ async function deleteSingleEvent(key){
 // is that they keep being normal, editable cards afterward (not parked
 // in a read-only archive), so this always needs a real 'standard' sheet
 // to move them into.
+// Creates (or just switches to, if it's already there) the logged-in
+// person's own private copy of a shared "template" sheet — a real,
+// separate sheet named "{Original} — {Name}", not some filtered view of
+// the shared one. Starts as a snapshot of whatever the template
+// currently has, so nobody's starting from a blank list, but every edit
+// after that only ever touches their own copy — the template and
+// everyone else's private one are untouched by it. Visibility is
+// handled entirely by sheetVisibleToCurrentUser(). Generalized from
+// what used to be presale-only (openOrCreateMyPrivatePresale) — the
+// same "your own copy of a shared starting point" need turned out to
+// apply to every sheet, not just Presale specifically.
+async function openOrCreateMyPrivateCopyOf(templateSheetName){
+  if(!currentUser || !templateSheetName) return;
+  const privateName = `${templateSheetName} — ${currentUser}`;
+  const existing = sheets.find(s => s.name === privateName);
+  if(existing){
+    setActiveSheet(privateName);
+    return;
+  }
+  const template = sheets.find(s => s.name === templateSheetName);
+  const seedEvents = template ? remoteCache.filter(r => r.appSheet === template.name) : [];
+  const newMode = template ? template.mode : 'standard';
+  sheets.push({ name: privateName, mode: newMode });
+  renderTabs();
+  await pushSheetEvents(privateName, newMode, seedEvents);
+  setActiveSheet(privateName);
+}
+// Template sheets (Presale, 2 weeks out, anything else ownerless) are
+// admin-only to view directly, so a non-admin can't just click their
+// tab and see a clone button sitting there — this is how they find out
+// what's available to copy from at all: their names still live in
+// `sheets` (rebuilt from the full remoteCache, which isn't
+// visibility-filtered — only the tab bar rendering is), even though
+// their content isn't shown.
+function pickTemplateToCloneFrom(){
+  const templates = sheets.filter(s => s.mode !== 'trash' && s.mode !== 'history' && s.mode !== 'accounts' && s.mode !== 'usopen' && !/ — /.test(s.name));
+  if(!templates.length){ alert('No shared sheets to make a private copy of yet.'); return null; }
+  const names = templates.map(s => s.name);
+  const chosen = prompt(`Make your own private copy of which sheet?\n${names.join('\n')}`, names[0]);
+  if(chosen === null) return null;
+  const match = templates.find(s => s.name.toLowerCase() === chosen.trim().toLowerCase());
+  if(!match){ alert('No sheet with that exact name.'); return null; }
+  return match.name;
+}
+
 function pickReleaseDestinationSheet(){
   const standardSheets = sheets.filter(s => s.mode === 'standard');
   if(!standardSheets.length){
@@ -4106,44 +4290,52 @@ async function bringBackFromHistory(key){
 // If that original sheet no longer exists (renamed or deleted since),
 // asks which sheet to restore into instead rather than silently
 // dropping it somewhere unexpected.
+// Operates directly on remoteCache/pushSheetEvents rather than assuming
+// Trash is the currently active sheet — it needs to work correctly when
+// triggered from a search result too (see search-restore-trash), not
+// only from inside the Trash tab itself, and allEvents only ever holds
+// whatever sheet is actively open.
 async function restoreFromTrash(key){
-  const ev = allEvents.find(e => eventKey(e) === key);
+  const trashSheet = sheets.find(s => s.mode === 'trash');
+  if(!trashSheet) return;
+  const trashEvents = remoteCache.filter(r => r.appSheet === trashSheet.name);
+  const ev = trashEvents.find(e => eventKey(e) === key);
   if(!ev) return;
-  const ann = getAnnotation(key);
   let targetSheet = sheets.find(s => s.name === ev.deletedFromSheet && s.mode !== 'trash');
   if(!targetSheet){
-    const names = sheets.filter(s => s.mode !== 'trash').map(s => s.name);
+    const names = sheets.filter(s => s.mode !== 'trash' && s.mode !== 'history' && s.mode !== 'accounts').map(s => s.name);
     const typed = prompt(`"${ev.deletedFromSheet || 'that sheet'}" doesn't exist anymore. Restore to which sheet?\n\n${names.join(', ')}`, names[0] || '');
     if(typed === null) return;
     targetSheet = sheets.find(s => s.name === typed.trim());
     if(!targetSheet){ alert('No sheet with that name — nothing was restored.'); return; }
   }
   pushUndo();
-  allEvents = allEvents.filter(e => eventKey(e) !== key);
-  delete annotations[key];
-  if(openNotesKey === key){ openNotesKey = null; noteSnapshotOnOpen = null; }
-  render();
-  await pushActiveSheetToRemote(); // persists the removal from Trash
-  const restoredEvent = { ...ev, note: ann.note || '', rating: ann.rating || 0, pinned: false, sections: ann.sections || [], isNew: false, archived: false, noteHistory: ann.noteHistory || [], priceHistory: ann.priceHistory || [], extraLinks: ann.extraLinks || [] };
+  const remainingTrash = trashEvents.filter(e => eventKey(e) !== key);
+  await pushSheetEvents(trashSheet.name, 'trash', remainingTrash);
+  const restoredEvent = { ...ev, isNew: false, archived: false };
   delete restoredEvent.deletedAt;
   delete restoredEvent.deletedFromSheet;
   const targetExisting = remoteCache.filter(r => r.appSheet === targetSheet.name);
   await pushSheetEvents(targetSheet.name, targetSheet.mode, [...targetExisting, restoredEvent]);
+  if(activeSheetName === trashSheet.name || activeSheetName === targetSheet.name) syncActiveSheetFromCache();
+  render();
 }
 
 // The actual point of no return — permanently removes an event from the
-// Trash sheet. This is the one delete action that still asks for the
-// passcode, since unlike the regular "delete" (which just moves things
-// here), there's no getting this back afterward.
+// Trash sheet. Same reasoning as restoreFromTrash above for operating
+// on remoteCache directly instead of allEvents — this needs to work
+// when triggered from a search result on any sheet, not only from
+// inside the Trash tab. No separate passcode prompt here either, for
+// the same reason as clearActiveSheetEvents above — admin mode is
+// already checked at every call site before this ever runs.
 async function permanentlyDeleteFromTrash(key){
-  const ok = await requestDeletePasscode('Enter the passcode to permanently delete this — there is no getting it back after this');
-  if(!ok) return;
+  const trashSheet = sheets.find(s => s.mode === 'trash');
+  if(!trashSheet) return;
   pushUndo();
-  allEvents = allEvents.filter(e => eventKey(e) !== key);
-  delete annotations[key];
-  if(openNotesKey === key){ openNotesKey = null; noteSnapshotOnOpen = null; }
+  const remaining = remoteCache.filter(r => r.appSheet === trashSheet.name && eventKey(r) !== key);
+  await pushSheetEvents(trashSheet.name, 'trash', remaining);
+  if(activeSheetName === trashSheet.name) syncActiveSheetFromCache();
   render();
-  await pushActiveSheetToRemote();
 }
 
 // Bulk-clears events dated before today (midnight boundary) — today's
@@ -4533,13 +4725,22 @@ function renderTabs(){
   // History never appears here — it's reached only through the "View
   // history" menu item, kept out of the tab bar entirely so it can't
   // show up during normal day-to-day use no matter what.
-  sheetTabs.innerHTML = sheets.filter(s => s.mode !== 'history').map(s => `
+  // Trash stays out of the tab bar for everyday use — it's not
+  // something that needs a permanent, always-visible slot next to your
+  // real sheets, and search now surfaces trashed items directly when
+  // they're actually relevant (see the History-style section in
+  // renderSearchResults) rather than needing its own tab to browse.
+  // Admin mode brings it back, since going in to permanently clean
+  // something out is exactly the kind of thing admin mode exists for.
+  // A private presale sheet ("Presale — Shlomo") follows the same
+  // pattern: only visible to the person it belongs to, or to admin.
+  sheetTabs.innerHTML = sheets.filter(s => s.mode !== 'history' && s.mode !== 'accounts' && sheetVisibleToCurrentUser(s)).map(s => `
     <button class="sheet-tab ${s.name === activeSheetName ? 'active' : ''}" data-name="${escapeHtml(s.name)}" title="${s.mode === 'trash' ? 'Deleted events — restore them or clear them out for good' : 'Drag to reorder — double-click to rename'}" draggable="${s.mode !== 'trash'}">
       <span class="sheet-tab-icon">${s.mode === 'usopen' ? '🎾' : s.mode === 'presale' ? '🎫' : s.mode === 'broadway' ? '🎭' : s.mode === 'trash' ? '🗑' : '🎟️'}</span>
       <span class="tab-label">${escapeHtml(s.name)}</span>
       ${(s.mode === 'trash' || !adminModeOn) ? '' : `<span class="tab-close" data-name="${escapeHtml(s.name)}" title="Delete sheet">×</span>`}
     </button>
-  `).join('') + `<button class="sheet-tab add-tab" id="addSheetBtn" title="Start a new, separate sheet (name it, choose US Open mode if it needs Day/Night)">+</button>`;
+  `).join('') + `<button class="sheet-tab add-tab" id="addSheetBtn" title="Start a new, separate sheet (name it, choose US Open mode if it needs Day/Night)">+</button>` + (currentUser ? `<button class="sheet-tab add-tab" id="myPrivateCopyBtn" title="Make your own private copy of a shared sheet (Presale, 2 weeks out, etc) — starts as a snapshot, only you (and admin) can see it">🔒 My copy of…</button>` : '');
 
   sheetTabs.querySelectorAll('.sheet-tab:not(.add-tab)').forEach(btn => {
     btn.addEventListener('click', e => {
@@ -4606,6 +4807,11 @@ function renderTabs(){
   });
   const addBtn = document.getElementById('addSheetBtn');
   if(addBtn) addBtn.addEventListener('click', addSheet);
+  const myPresaleBtn = document.getElementById('myPrivateCopyBtn');
+  if(myPresaleBtn) myPresaleBtn.addEventListener('click', () => {
+    const chosen = pickTemplateToCloneFrom();
+    if(chosen) openOrCreateMyPrivateCopyOf(chosen);
+  });
 }
 
 // ---------- Rendering ----------
@@ -4793,6 +4999,28 @@ function render(){
   }
   updateModeUI();
   const mode = activeSheetMode();
+  // Renders as if genuinely empty — same wording, same "drag a CSV
+  // here" prompt as a real empty sheet, deliberately indistinguishable
+  // from one — for any sheet sheetVisibleToCurrentUser() says shouldn't
+  // be visible right now (an ownerless template only admin can see
+  // directly, someone else's private copy, Trash while logged out,
+  // etc). The underlying data in allEvents/remoteCache is completely
+  // untouched; this only affects what gets rendered to the screen. This
+  // is mostly a backstop — updateAdminModeUI() already redirects away
+  // from a sheet that stops being visible whenever login state changes
+  // — but a render can in principle happen without that path running
+  // (a fresh sheets rebuild while sitting on a sheet that's no longer
+  // yours, for instance), so this check stays here as the last line of
+  // defense rather than assuming that redirect always caught it.
+  if(activeSheet() && !sheetVisibleToCurrentUser(activeSheet())){
+    emptyState.style.display = 'block';
+    clearBtn.style.display = 'none';
+    if(typeof releaseAllPresaleBtn !== 'undefined') releaseAllPresaleBtn.style.display = 'none';
+    listRoot.innerHTML = '';
+    countLabel.textContent = '';
+    refreshNavigation();
+    return;
+  }
   if(mode === 'usopen') renderUsOpen();
   else if(mode === 'presale') renderPresale();
   else if(mode === 'broadway') renderBroadway();
@@ -4865,7 +5093,7 @@ function renderPresale(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
+  clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
   releaseAllPresaleBtn.style.display = hasData ? 'block' : 'none';
 
   if(!hasData){
@@ -5041,10 +5269,8 @@ function renderSearchResults(query){
 
   const matched = events.filter(ev => {
     // Trash and History live on their own, separate from normal active
-    // results — Trash because it's deliberately out of the way (you go
-    // looking for it specifically, via its own tab), History because
-    // it gets its own dedicated section below instead of being mixed in
-    // as if it were just another live, editable card.
+    // results — both get their own dedicated section below instead of
+    // being mixed in as if they were just another live, editable card.
     if(ev.__mode === 'trash' || ev.__mode === 'history') return false;
     if(!matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann)) return false;
     // Archived events should stay out of search results by default, same
@@ -5062,10 +5288,15 @@ function renderSearchResults(query){
   // live event — so the exact same matchesSearch check (name, venue,
   // note text) works here unchanged; only the sheet-mode filter differs.
   const historicalMatched = events.filter(ev => ev.__mode === 'history' && matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann));
+  // Trash's own tab is hidden from everyday use now (only shows up in
+  // admin mode) — search is how a deleted show stays findable without
+  // needing that tab back. Same matchesSearch check again; only the
+  // sheet-mode differs from the two filters above.
+  const trashMatched = events.filter(ev => ev.__mode === 'trash' && matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann));
 
   countLabel.textContent = `${matched.length} match${matched.length === 1 ? '' : 'es'} across all sheets`;
 
-  if(!matched.length && !historicalMatched.length){
+  if(!matched.length && !historicalMatched.length && !trashMatched.length){
     listRoot.innerHTML = searchNoResultsHtml(query, events);
     return;
   }
@@ -5099,10 +5330,13 @@ function renderSearchResults(query){
       }).join('')}</div>`;
     });
   } else {
-    html += `<p class="insights-empty" style="padding:16px 20px;">No active matches for "${escapeHtml(query)}" — but see History below.</p>`;
+    html += `<p class="insights-empty" style="padding:16px 20px;">No active matches for "${escapeHtml(query)}" — but see below.</p>`;
   }
   if(historicalMatched.length){
     html += historySearchSectionHtml(historicalMatched);
+  }
+  if(trashMatched.length){
+    html += trashSearchSectionHtml(trashMatched);
   }
   listRoot.innerHTML = html;
 }
@@ -5130,11 +5364,46 @@ function historySearchSectionHtml(historicalMatched){
       ${codes.length ? `<div class="history-search-codes">${codes.map(c => `<span class="history-search-code-chip">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
       ${ann.note && ann.note.trim() ? `<div class="history-search-note">📝 ${escapeHtml(ann.note.trim())}</div>` : ''}
       ${sections.length ? `<div class="history-search-sections">${sections.map(s => `<span class="history-section-chip">${escapeHtml(s.label || '')} ${escapeHtml(s.price ? '$' + s.price : '')}</span>`).join('')}</div>` : ''}
-      <button type="button" class="history-search-restore-btn" data-action="bring-back-history" data-key="${escapeHtml(key)}" title="Add this back onto a regular sheet — its code, notes, and prices come with it">↺ Bring back</button>
+      <div class="history-search-restore-row">
+        <button type="button" class="history-search-restore-btn" data-action="bring-back-history" data-key="${escapeHtml(key)}" title="Add this back onto a regular sheet — its code, notes, and prices come with it">↺ Bring back</button>
+      </div>
     </div>`;
   }).join('');
   return `
     <p class="notes-label" style="margin:24px 20px 8px;">📜 History (${historicalMatched.length})</p>
+    <div class="history-search-list">${rows}</div>`;
+}
+// Trash's own tab is now hidden outside admin mode — this is how a
+// deleted show stays findable at all without it. Restore works for
+// anyone (it's the safe direction — putting a show back is never
+// destructive), while Delete forever only shows up once admin mode is
+// unlocked, same rule as everywhere else permanent deletion lives. No
+// confirm() dialog on top of that: unlocking admin mode in the first
+// place is already the deliberate, hard-to-reach gate here, and this is
+// specifically meant to be the fast, low-friction path once you're in
+// it — a second "are you sure" on every single item would undercut the
+// whole point of making admin mode the focused place to clean things up.
+function trashSearchSectionHtml(trashMatched){
+  const sorted = [...trashMatched].sort((a, b) => new Date(b.deletedAt || 0) - new Date(a.deletedAt || 0));
+  const rows = sorted.map(ev => {
+    const key = eventKey(ev);
+    const dateStr = ev.dateObj ? new Date(ev.dateObj).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    const deletedWhen = ev.deletedAt ? new Date(ev.deletedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    return `<div class="history-search-row">
+      <div class="history-search-main">
+        <span class="history-search-name">${escapeHtml(ev.name || '')}</span>
+        ${dateStr ? `<span class="history-search-date">${escapeHtml(dateStr)}</span>` : ''}
+      </div>
+      <div class="history-search-venue">${escapeHtml(ev.venue || '')}</div>
+      ${deletedWhen ? `<div class="history-search-note">🗑 Deleted ${escapeHtml(deletedWhen)}${ev.deletedFromSheet ? ' from ' + escapeHtml(ev.deletedFromSheet) : ''}</div>` : ''}
+      <div class="history-search-restore-row">
+        <button type="button" class="history-search-restore-btn" data-action="search-restore-trash" data-key="${escapeHtml(key)}" title="Put this back on the sheet it was deleted from">↺ Restore</button>
+        ${adminModeOn ? `<button type="button" class="history-search-delete-btn" data-action="search-delete-forever" data-key="${escapeHtml(key)}" title="Permanently delete — there is no way to get this back after this">🗑 Delete forever</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  return `
+    <p class="notes-label" style="margin:24px 20px 8px;">🗑 Trash (${trashMatched.length})</p>
     <div class="history-search-list">${rows}</div>`;
 }
 
@@ -5239,7 +5508,7 @@ function renderStandard(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
+  clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
   releaseAllPresaleBtn.style.display = 'none';
 
   if(!hasData){
@@ -6543,7 +6812,7 @@ function renderUsOpen(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
+  clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
   releaseAllPresaleBtn.style.display = 'none';
 
   if(!hasData){
@@ -6614,7 +6883,7 @@ function renderBroadway(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = (hasData && adminModeOn) ? 'block' : 'none';
+  clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
   releaseAllPresaleBtn.style.display = 'none';
 
   if(!hasData){
@@ -6782,7 +7051,7 @@ fileInput.addEventListener('change', e => {
 });
 
 clearBtn.addEventListener('click', () => {
-  if(!adminModeOn){ alert('Clearing requires admin mode — unlock it from the "..." menu.'); return; }
+  if(!canClearActiveSheet()){ alert('Clearing this sheet requires being logged in as its owner, or as admin.'); return; }
   clearActiveSheetEvents();
   moreMenuPopover.classList.remove('open');
 });
@@ -7101,9 +7370,25 @@ listRoot.addEventListener('click', async e => {
   const deleteForeverBtn = e.target.closest('[data-action="delete-forever"]');
   if(deleteForeverBtn){
     if(!adminModeOn){ alert('Permanent deletion requires admin mode — unlock it from the "..." menu.'); return; }
-    if(confirm('Permanently delete this? There is no way to get it back after this.')){
-      permanentlyDeleteFromTrash(deleteForeverBtn.dataset.key);
-    }
+    // No confirm() here on purpose — unlocking admin mode is already
+    // the deliberate, hard-to-reach gate for this; a second "are you
+    // sure" on every single item would work against making this the
+    // fast, low-friction way to actually clear trash out once you're
+    // in that mode, which is the whole point of it.
+    permanentlyDeleteFromTrash(deleteForeverBtn.dataset.key);
+    return;
+  }
+
+  const searchRestoreBtn = e.target.closest('[data-action="search-restore-trash"]');
+  if(searchRestoreBtn){
+    restoreFromTrash(searchRestoreBtn.dataset.key);
+    return;
+  }
+
+  const searchDeleteForeverBtn = e.target.closest('[data-action="search-delete-forever"]');
+  if(searchDeleteForeverBtn){
+    if(!adminModeOn){ alert('Permanent deletion requires admin mode — unlock it from the "..." menu.'); return; }
+    permanentlyDeleteFromTrash(searchDeleteForeverBtn.dataset.key);
     return;
   }
 
