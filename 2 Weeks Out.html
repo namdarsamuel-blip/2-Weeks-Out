@@ -1138,39 +1138,15 @@
 
   /* ---------- Insights modal ---------- */
   .insights-modal{max-width:600px;max-height:85vh;display:flex;flex-direction:column;padding:0;overflow:hidden;}
-  .calculator-modal{max-width:560px;}
-  .calculator-columns{display:flex;gap:12px;}
-  .calculator-col{
-    flex:1 1 0;min-width:0;
-    border-radius:10px;padding:12px;
-    border:1px solid var(--hairline);
-  }
-  .calculator-col-vivid{border-color:rgba(232,60,140,.35);background:rgba(232,60,140,.04);}
-  .calculator-col-tm{border-color:rgba(40,110,235,.35);background:rgba(40,110,235,.04);}
-  .calculator-label-vivid{color:var(--vivid-pink) !important;}
-  .calculator-label-tm{color:var(--tm-blue) !important;}
-  .calculator-desc{font-size:11.5px;color:var(--muted);margin:0 0 10px;}
-  .calculator-input{
+  .modal-box-wide{max-width:560px;}
+  .modal-desc-text{font-size:11.5px;color:var(--muted);margin:0 0 10px;}
+  .modal-text-input{
     width:100%;box-sizing:border-box;
     background:var(--bg);border:1px solid var(--hairline);border-radius:7px;
     color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:14px;
     padding:9px 10px;outline:none;
   }
-  .calculator-input:focus{border-color:var(--teal);}
-  /* No spinner arrows — these fields regularly hold values in the
-     hundreds, where a stepper that only moves by 1 per click is useless
-     rather than helpful. */
-  .calculator-input::-webkit-outer-spin-button,
-  .calculator-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
-  .calculator-input[type="number"]{-moz-appearance:textfield;}
-  /* Split point: divisor picker below both inputs (not nested inside
-     just the Ticketmaster column) is what actually fixed the lopsided
-     feel — squeezing a 5×5 grid into one narrow half of a side-by-side
-     layout was what made the two sides look so mismatched, with a big
-     dead gap on the VividSeats side and a cramped grid on the other.
-     Full width here means every number gets a comfortable tap target,
-     and both result boxes below end up the same height as each other
-     since neither one has anything else stacked inside it anymore. */
+  .modal-text-input:focus{border-color:var(--teal);}
   .add-show-field{margin-bottom:12px;}
   .add-show-label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;}
   .add-show-hint{
@@ -1183,62 +1159,11 @@
     cursor:pointer;transition:filter .15s ease;margin-top:4px;
   }
   .add-show-submit-btn:hover{filter:brightness(1.08);}
-  .calculator-cad-toggle{
-    display:flex;align-items:center;gap:6px;margin-top:10px;
-    font-size:11.5px;color:var(--muted);cursor:pointer;user-select:none;
-  }
-  .calculator-cad-toggle input{cursor:pointer;}
-  .calculator-cad-toggle.is-checked{color:var(--tm-blue);font-weight:600;}
-  .calculator-rate-status{font-size:10.5px;color:var(--muted);margin-top:5px;min-height:13px;}
-  .calculator-rate-status.is-error{color:var(--coral);}
-  .calculator-divisor-caption{font-size:11.5px;color:var(--muted);margin:14px 0 8px;text-align:center;}
-  .calculator-divisor-grid{
-    display:grid;grid-template-columns:repeat(5, 1fr);gap:6px;
-  }
-  .calculator-divisor-btn{
-    font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;
-    padding:7px 0;border-radius:6px;text-align:center;
-    border:1px solid var(--hairline);background:var(--bg);color:var(--muted);
-    cursor:pointer;transition:border-color .15s ease,background .15s ease,color .15s ease,transform .1s ease;
-  }
-  .calculator-divisor-btn:hover{border-color:var(--tm-blue);color:var(--text);}
-  .calculator-divisor-btn:active{transform:scale(.94);}
-  .calculator-divisor-btn.active{background:var(--tm-blue);border-color:var(--tm-blue);color:#fff;}
-  .calculator-results-row{margin-top:16px;}
-  .calculator-result{
-    flex:1 1 0;min-width:0;
-    padding:14px 10px;border-radius:8px;
-    background:rgba(255,255,255,.04);border:1px solid var(--hairline);
-    font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:700;
-    color:var(--text);text-align:center;
-  }
-  .calculator-result.is-empty{color:var(--muted);font-size:14px;font-weight:400;}
-  .calculator-result-vivid:not(.is-empty){background:rgba(232,60,140,.12);border-color:rgba(232,60,140,.4);color:var(--vivid-pink);}
-  .calculator-result-tm:not(.is-empty){background:rgba(40,110,235,.12);border-color:rgba(40,110,235,.4);color:var(--tm-blue);}
-  .calculator-compare{
-    margin-top:16px;padding:14px;border-radius:10px;
-    border:1px solid var(--hairline);background:rgba(255,255,255,.02);
-  }
-  .calculator-compare.is-good{border-color:rgba(111,207,127,.4);background:rgba(111,207,127,.08);}
-  .calculator-compare.is-bad{border-color:rgba(255,107,106,.3);background:rgba(255,107,106,.05);}
-  .calculator-compare-pct{
-    font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:700;
-    color:var(--muted);text-align:center;margin-bottom:10px;
-  }
-  .calculator-compare.is-good .calculator-compare-pct{color:#6fcf7f;}
-  .calculator-compare.is-bad .calculator-compare-pct{color:var(--coral);}
-  .calculator-compare-rows{display:flex;gap:10px;}
-  .calculator-compare-row{flex:1 1 0;text-align:center;}
-  .calculator-compare-row-label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;}
-  .calculator-compare-row-value{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;color:var(--text);}
-  .calculator-compare.is-good .calculator-compare-row-value{color:#6fcf7f;}
-  .calculator-compare.is-bad .calculator-compare-row-value{color:var(--coral);}
   .insights-modal-header{
     display:flex;align-items:center;justify-content:space-between;
     padding:18px 20px 14px;border-bottom:1px solid var(--hairline);flex:0 0 auto;
   }
   .insights-modal-header .modal-title{margin:0;}
-  .calculator-header-actions{display:flex;align-items:center;gap:10px;}
   .insights-close-btn{
     width:28px;height:28px;border-radius:6px;border:none;background:transparent;
     color:var(--muted);font-size:20px;line-height:1;cursor:pointer;
@@ -1682,7 +1607,6 @@
           <p class="sync-status" id="syncStatus">Not connected.</p>
         </div>
       </div>
-      <button class="btn ghost theme-toggle-btn" id="openCalculatorDirectBtn" type="button" title="Calculator — VividSeats/Ticketmaster price comparison">🧮</button>
       <div class="sync-wrap">
         <button class="btn ghost theme-toggle-btn" id="moreMenuToggleBtn" title="More">⋯</button>
         <div class="sync-popover" id="moreMenuPopover">
@@ -1780,7 +1704,7 @@
 <div class="modal-overlay" id="passcodeModal" style="display:none;">
   <div class="modal-box">
     <h3 class="modal-title" id="passcodeModalTitle">Enter your passcode</h3>
-    <input type="password" inputmode="numeric" autocomplete="off" id="passcodeModalInput" class="calculator-input" style="margin:14px 0;" placeholder="••••">
+    <input type="password" inputmode="numeric" autocomplete="off" id="passcodeModalInput" class="modal-text-input" style="margin:14px 0;" placeholder="••••">
     <div class="modal-actions">
       <button type="button" class="btn ghost" id="passcodeModalCancel">Cancel</button>
       <button type="button" class="btn primary" id="passcodeModalOk">OK</button>
@@ -1789,69 +1713,31 @@
 </div>
 
 <div class="modal-overlay" id="addShowModal" style="display:none;">
-  <div class="modal-box insights-modal calculator-modal">
+  <div class="modal-box insights-modal modal-box-wide">
     <div class="insights-modal-header">
       <h3 class="modal-title">+ Add show</h3>
       <button type="button" class="insights-close-btn" id="closeAddShowBtn" aria-label="Close">×</button>
     </div>
     <div class="insights-modal-body">
-      <p class="calculator-desc" style="margin-bottom:14px;">Paste a Ticketmaster link first — if the URL has the show's name and date built into it, this fills those in for you. Works best on links like <span style="font-family:'IBM Plex Mono',monospace;">ticketmaster.com/artist-name-tour-city-state-12-22-2026/event/...</span>; a bare event-ID link (no readable text in it) won't have anything to pull out, so you'll fill those in by hand.</p>
+      <p class="modal-desc-text" style="margin-bottom:14px;">Paste a Ticketmaster link first — if the URL has the show's name and date built into it, this fills those in for you. Works best on links like <span style="font-family:'IBM Plex Mono',monospace;">ticketmaster.com/artist-name-tour-city-state-12-22-2026/event/...</span>; a bare event-ID link (no readable text in it) won't have anything to pull out, so you'll fill those in by hand.</p>
       <div class="add-show-field">
         <label class="add-show-label">Ticket link</label>
-        <input type="text" autocomplete="off" class="calculator-input" id="addShowLinkInput" placeholder="Paste a Ticketmaster/VividSeats/StubHub link">
+        <input type="text" autocomplete="off" class="modal-text-input" id="addShowLinkInput" placeholder="Paste a Ticketmaster/VividSeats/StubHub link">
       </div>
       <div class="add-show-field">
         <label class="add-show-label">Show name</label>
-        <input type="text" autocomplete="off" class="calculator-input" id="addShowNameInput" placeholder="e.g. Jonas Brothers">
+        <input type="text" autocomplete="off" class="modal-text-input" id="addShowNameInput" placeholder="e.g. Jonas Brothers">
       </div>
       <div class="add-show-field">
         <label class="add-show-label">Venue</label>
-        <input type="text" autocomplete="off" class="calculator-input" id="addShowVenueInput" placeholder="e.g. Prudential Center, Newark, NJ">
+        <input type="text" autocomplete="off" class="modal-text-input" id="addShowVenueInput" placeholder="e.g. Prudential Center, Newark, NJ">
       </div>
       <div class="add-show-field">
         <label class="add-show-label">Date</label>
-        <input type="text" autocomplete="off" class="calculator-input" id="addShowDateInput" placeholder="e.g. Dec 22, 2026 or 12/22/2026">
+        <input type="text" autocomplete="off" class="modal-text-input" id="addShowDateInput" placeholder="e.g. Dec 22, 2026 or 12/22/2026">
       </div>
       <div class="add-show-hint" id="addShowSlugHint" style="display:none;"></div>
       <button type="button" class="add-show-submit-btn" id="addShowSubmitBtn">+ Add to this sheet</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="calculatorModal" style="display:none;">
-  <div class="modal-box insights-modal calculator-modal">
-    <div class="insights-modal-header">
-      <h3 class="modal-title">🧮 Calculator</h3>
-      <div class="calculator-header-actions">
-        <button type="button" class="reset-sections-btn" id="calcResetBtn" title="Clear both fields and start over">↺ Reset</button>
-        <button type="button" class="insights-close-btn" id="closeCalculatorBtn" aria-label="Close">×</button>
-      </div>
-    </div>
-    <div class="insights-modal-body">
-      <div class="calculator-columns">
-        <div class="calculator-col calculator-col-vivid">
-          <p class="notes-label calculator-label-vivid">VividSeats</p>
-          <p class="calculator-desc">A value, × 0.74 — always USD</p>
-          <input type="text" inputmode="decimal" autocomplete="off" class="calculator-input" id="calcVividInput" placeholder="e.g. $974.00, 974.00, or 974">
-        </div>
-        <div class="calculator-col calculator-col-tm">
-          <p class="notes-label calculator-label-tm">Ticketmaster</p>
-          <p class="calculator-desc">Final price, ÷ a number below</p>
-          <input type="text" inputmode="decimal" autocomplete="off" class="calculator-input" id="calcTmPriceInput" placeholder="e.g. $974.00 or CA $157.60">
-          <label class="calculator-cad-toggle">
-            <input type="checkbox" id="calcTmCadToggle">
-            🇨🇦 This is in CAD — convert to USD
-          </label>
-          <div class="calculator-rate-status" id="calcRateStatus"></div>
-        </div>
-      </div>
-      <p class="calculator-divisor-caption">Split Ticketmaster price across how many seats</p>
-      <div class="calculator-divisor-grid" id="calcTmDivisorGrid"></div>
-      <div class="calculator-columns calculator-results-row">
-        <div class="calculator-result calculator-result-vivid" id="calcVividResult">—</div>
-        <div class="calculator-result calculator-result-tm" id="calcTmResult">—</div>
-      </div>
-      <div class="calculator-compare" id="calcCompare" style="display:none;"></div>
     </div>
   </div>
 </div>
@@ -1962,37 +1848,39 @@ function updateAdminModeUI(){
 }
 // A private sheet (name ending in " — {Person}", e.g. "2 weeks out —
 // Shlomo" or "Presale — Shlomo") is only ever visible to the person it
-// A private sheet (name ending in " — {Person}", e.g. "2 weeks out —
-// Shlomo" or "Presale — Shlomo") is only ever visible to the person it
 // belongs to — strictly, no exceptions. US Open is the one deliberate
-// exception: always public, no login needed at all. Everything else —
-// an ownerless "template" sheet like the original "2 weeks out" or
-// "Presale" — is visible once you're logged in (as anyone). Trash no
-// longer exists as a concept at all (deleting now goes straight to
-// History), and neither Trash nor History nor Accounts ever appear as
-// a tab for anyone, including Sam — History is reached only through
-// search (the "Passed shows" section), and Accounts only through the
-// login/add-account flows.
+// exception: always public, no login needed at all. An ownerless
+// "template" sheet (no person suffix — legacy sheets like the original
+// "2 weeks out" from before this account system existed, or anything
+// created while nobody was logged in) belongs to nobody in particular,
+// so it defaults to Sam rather than being visible to everyone logged
+// in — Shlomo seeing a sheet he never created just because it happens
+// to have no owner would defeat the whole point of "you only see what
+// you made." Trash no longer exists as a concept at all (deleting now
+// goes straight to History), and neither Trash nor History nor Accounts
+// ever appear as a tab for anyone, including Sam — History is reached
+// only through search (the "Passed shows" section), and Accounts only
+// through the login/add-account flows.
 function sheetVisibleToCurrentUser(sheet){
   if(sheet.mode === 'trash' || sheet.mode === 'history' || sheet.mode === 'accounts') return false;
   if(sheet.mode === 'usopen') return true;
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
-  return !!currentUser;
+  return currentUser === 'Sam';
 }
 // Clearing is normally admin-only, same as every other destructive
 // action — but a private sheet is genuinely yours ("2 weeks out —
 // Shlomo" isn't shared with anyone), and presale specifically changes
-// every day, so waiting on admin just to start it over each day would
-// be exactly the wrong kind of friction. The owner of a private sheet
-// can clear their own without needing admin; a shared/template sheet
-// (or anyone else's private one) still requires it.
+// every day, so waiting on Sam just to start it over each day would be
+// exactly the wrong kind of friction. The owner of a private sheet can
+// clear their own freely; US Open or an ownerless sheet only Sam can.
 function canClearActiveSheet(){
-  if(adminModeOn) return true;
   const sheet = activeSheet();
-  if(!sheet) return false;
+  if(!sheet || !currentUser) return false;
+  if(sheet.mode === 'usopen') return currentUser === 'Sam';
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
-  return !!privateMatch && currentUser === privateMatch[2];
+  if(privateMatch) return currentUser === privateMatch[2];
+  return currentUser === 'Sam';
 }
 adminModeBtn.addEventListener('click', async () => {
   moreMenuPopover.classList.remove('open');
@@ -2041,7 +1929,6 @@ addAccountBtn.addEventListener('click', async () => {
   await saveNewAccount(name.trim(), passcode.trim(), isAdmin);
   alert(`${name.trim()}'s account is ready — they can log in with their passcode from the "..." menu.`);
 });
-const calculatorModal = $('#calculatorModal');
 // "+ Add show" — a fast path for a single show without needing a whole
 // CSV for it. Tries to save some typing when the pasted link is one of
 // Ticketmaster's descriptive-URL style ones (name/venue/date baked
@@ -2140,259 +2027,6 @@ addShowSubmitBtn.addEventListener('click', async () => {
   closeAddShowModal();
 });
 
-const openCalculatorDirectBtn = $('#openCalculatorDirectBtn');
-const calcResetBtn = $('#calcResetBtn');
-const closeCalculatorBtn = $('#closeCalculatorBtn');
-const calcVividInput = $('#calcVividInput');
-const calcVividResult = $('#calcVividResult');
-const calcTmPriceInput = $('#calcTmPriceInput');
-const calcTmCadToggle = $('#calcTmCadToggle');
-const calcRateStatus = $('#calcRateStatus');
-const calcTmDivisorGrid = $('#calcTmDivisorGrid');
-const calcTmResult = $('#calcTmResult');
-const calcCompare = $('#calcCompare');
-
-// Two independent, live-updating calculators side by side — VividSeats
-// (a value × 0.74) and Ticketmaster (a final price ÷ a chosen number
-// from 1 to 25, e.g. splitting a season/package price across however
-// many individual games or dates it covers). The divisor is a full 1–25
-// grid of tap targets rather than a plain number field — picking a
-// number this way is one click instead of typing-then-tabbing-away, and
-// the currently-picked one stays visibly highlighted.
-let calcTmDivisor = 1;
-// Tracks whether the person has taken manual control of the CAD toggle
-// for the CURRENT price text — without this, unchecking it by hand
-// immediately gets overridden right back to checked on the very next
-// keystroke, since the pasted text still visibly says "CA $...". Auto-
-// detection should only ever be a one-time suggestion, never something
-// that fights a manual correction.
-let calcTmCadManuallySet = false;
-calcTmDivisorGrid.innerHTML = Array.from({ length: 25 }, (_, i) => i + 1)
-  .map(n => `<button type="button" class="calculator-divisor-btn ${n === calcTmDivisor ? 'active' : ''}" data-divisor="${n}">${n}</button>`)
-  .join('');
-function formatCalcResult(n){
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-// Both fields need to accept a straight paste from a listing — "$974.00",
-// "974.00", "974", with or without thousands commas, all need to parse
-// the same way. Also recognizes a leading "CA"/"CAD" (however it's
-// written — "CA $157.60", "CAD 157.60", "C$157.60") so pasting a
-// Ticketmaster price straight off a Canadian listing auto-detects as
-// CAD without needing to remember to flip the toggle by hand first.
-function parseMoneyValue(raw){
-  const str = (raw || '').trim();
-  if(!str) return { value: null, isCAD: false };
-  // Matches "CAD 157.60", "CA $157.60", "CA 157.60" (no $ at all),
-  // "C$157.60" — anywhere the string starts with a Canadian marker,
-  // with or without a dollar sign right after it. \b keeps this from
-  // false-triggering on a word that just happens to start with those
-  // letters (like "Cash").
-  const isCAD = /^\s*(CAD|CA)\b|^\s*C\$/i.test(str);
-  const cleaned = str.replace(/CAD/gi, '').replace(/\bCA\b/gi, '').replace(/[^0-9.\-]/g, '');
-  const value = cleaned === '' ? null : parseFloat(cleaned);
-  return { value: (value !== null && !isNaN(value)) ? value : null, isCAD };
-}
-// Fetched once and cached for the rest of the session (exchange rates
-// don't meaningfully move minute to minute) — every source here is
-// free and needs no account or key sitting in a public HTML file.
-// Tries each in order rather than betting everything on one: exchange
-// rate APIs occasionally migrate domains or add a version prefix (this
-// list already reflects one such move — Frankfurter's canonical host
-// changed from api.frankfurter.app to api.frankfurter.dev/v1), and a
-// page that only knows one exact URL breaks outright the next time that
-// happens instead of quietly trying the next option. Deliberately never
-// falls back to a hardcoded rate if every source fails: a stale guess
-// baked into the page would silently drift wrong over time in a way
-// nobody would notice, whereas a clear "rate unavailable" tells you
-// exactly when not to trust the converted number.
-const CAD_RATE_SOURCES = [
-  {
-    url: 'https://api.frankfurter.dev/v1/latest?from=CAD&to=USD',
-    parse: data => ({ rate: data && data.rates && data.rates.USD, date: data && data.date })
-  },
-  {
-    url: 'https://api.frankfurter.app/latest?from=CAD&to=USD',
-    parse: data => ({ rate: data && data.rates && data.rates.USD, date: data && data.date })
-  },
-  {
-    url: 'https://open.er-api.com/v6/latest/CAD',
-    parse: data => ({ rate: data && data.rates && data.rates.USD, date: data && (data.time_last_update_utc || '').slice(0, 16) })
-  }
-];
-let cadToUsdRate = null;
-let cadRateDate = null;
-let cadRateFetchPromise = null;
-async function ensureCadRate(){
-  if(cadToUsdRate !== null) return cadToUsdRate;
-  if(cadRateFetchPromise) return cadRateFetchPromise;
-  calcRateStatus.textContent = 'Fetching live CAD→USD rate…';
-  calcRateStatus.classList.remove('is-error');
-  cadRateFetchPromise = (async () => {
-    for(const source of CAD_RATE_SOURCES){
-      try{
-        const r = await fetch(source.url);
-        if(!r.ok) continue;
-        const data = await r.json();
-        const { rate, date } = source.parse(data);
-        if(!rate || isNaN(rate)) continue;
-        cadToUsdRate = rate;
-        cadRateDate = date || null;
-        return rate;
-      }catch(err){ /* try the next source */ }
-    }
-    calcRateStatus.textContent = 'Couldn\'t fetch a live rate — check your connection and try again.';
-    calcRateStatus.classList.add('is-error');
-    return null;
-  })();
-  const result = await cadRateFetchPromise;
-  cadRateFetchPromise = null;
-  return result;
-}
-function updateVividCalc(){
-  const { value: v } = parseMoneyValue(calcVividInput.value);
-  if(v === null){
-    calcVividResult.textContent = '—';
-    calcVividResult.classList.add('is-empty');
-  } else {
-    calcVividResult.classList.remove('is-empty');
-    calcVividResult.textContent = formatCalcResult(v * 0.74);
-  }
-  updateCalcCompare();
-}
-async function updateTmCalc(){
-  const { value: price, isCAD: detectedCAD } = parseMoneyValue(calcTmPriceInput.value);
-  // Auto-check (never auto-uncheck) on detecting a CAD marker in what
-  // was typed/pasted — a person clearing the $ sign back out shouldn't
-  // silently flip the toggle back off underneath them. But once the
-  // toggle has been changed by hand for this price, that choice sticks
-  // regardless of what the text still says, until the field is cleared
-  // or reset.
-  if(detectedCAD && !calcTmCadToggle.checked && !calcTmCadManuallySet){
-    calcTmCadToggle.checked = true;
-    calcTmCadToggle.closest('.calculator-cad-toggle').classList.add('is-checked');
-  }
-  if(price === null){
-    calcTmCadManuallySet = false;
-    calcTmResult.textContent = '—';
-    calcTmResult.classList.add('is-empty');
-    calcRateStatus.textContent = '';
-    updateCalcCompare();
-    return;
-  }
-  let usdPrice = price;
-  if(calcTmCadToggle.checked){
-    const rate = await ensureCadRate();
-    if(rate === null){
-      calcTmResult.textContent = '—';
-      calcTmResult.classList.add('is-empty');
-      updateCalcCompare();
-      return;
-    }
-    usdPrice = price * rate;
-    // Set on every conversion, not just the first-ever fetch — this
-    // used to only get written inside ensureCadRate()'s success branch,
-    // which only runs once per session (later calls return the cached
-    // rate and skip that code entirely), so the CAD→USD detail was only
-    // ever visible the very first time and silently disappeared after.
-    // Shows the actual converted total, not just the eventual per-seat
-    // split — "355 CAD is how much USD" is its own useful number, not
-    // only the rate used to get there.
-    calcRateStatus.classList.remove('is-error');
-    calcRateStatus.textContent = `${formatCalcResult(price)} CAD → ${formatCalcResult(usdPrice)} USD  ·  rate: 1 CAD = ${rate.toFixed(4)} USD${cadRateDate ? ' (' + cadRateDate + ')' : ''}`;
-  } else {
-    calcRateStatus.textContent = '';
-  }
-  calcTmResult.classList.remove('is-empty');
-  calcTmResult.textContent = formatCalcResult(usdPrice / calcTmDivisor);
-  updateCalcCompare();
-}
-// The actual point of running both numbers side by side: is buying at
-// the Ticketmaster cost-per-seat and reselling at the VividSeats net
-// payout actually worth it. Profit per seat is straightforward
-// (VividSeats payout minus what each seat cost on Ticketmaster); total
-// profit multiplies that by the same seat count already picked on the
-// Ticketmaster side, since that's the number of seats this whole
-// comparison is actually about. 30%+ margin is called out in green as
-// the "typically want to see this" bar; a real loss (spending more per
-// seat than you'd net back) is called out in red so it's not mistaken
-// for a small, acceptable margin. Ticketmaster's own price is already
-// USD-converted by the time it gets here (see updateTmCalc), so this
-// never needs to know about CAD itself.
-async function updateCalcCompare(){
-  const { value: vividVal } = parseMoneyValue(calcVividInput.value);
-  const { value: tmRaw } = parseMoneyValue(calcTmPriceInput.value);
-  if(vividVal === null || tmRaw === null){
-    calcCompare.style.display = 'none';
-    return;
-  }
-  let tmPrice = tmRaw;
-  if(calcTmCadToggle.checked){
-    const rate = cadToUsdRate; // already resolved (or attempted) by updateTmCalc; avoid a second fetch race here
-    if(rate === null || rate === undefined){ calcCompare.style.display = 'none'; return; }
-    tmPrice = tmRaw * rate;
-  }
-  const vividNet = vividVal * 0.74;
-  const tmPerSeat = tmPrice / calcTmDivisor;
-  const profitPerSeat = vividNet - tmPerSeat;
-  const totalProfit = profitPerSeat * calcTmDivisor;
-  const pct = tmPerSeat !== 0 ? (profitPerSeat / tmPerSeat) * 100 : null;
-  calcCompare.style.display = 'block';
-  calcCompare.classList.remove('is-good', 'is-bad');
-  if(pct !== null && pct >= 30) calcCompare.classList.add('is-good');
-  else if(pct !== null && pct < 0) calcCompare.classList.add('is-bad');
-  const pctText = pct === null ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
-  const seatLabel = calcTmDivisor === 1 ? '1 seat' : `${calcTmDivisor} seats`;
-  calcCompare.innerHTML = `
-    <div class="calculator-compare-pct">${escapeHtml(pctText)} <span style="font-size:12px;font-weight:400;color:var(--muted);">vs Ticketmaster cost</span></div>
-    <div class="calculator-compare-rows">
-      <div class="calculator-compare-row">
-        <div class="calculator-compare-row-label">Profit / seat</div>
-        <div class="calculator-compare-row-value">${escapeHtml(formatCalcResult(profitPerSeat))}</div>
-      </div>
-      <div class="calculator-compare-row">
-        <div class="calculator-compare-row-label">Total (${escapeHtml(seatLabel)})</div>
-        <div class="calculator-compare-row-value">${escapeHtml(formatCalcResult(totalProfit))}</div>
-      </div>
-    </div>`;
-}
-calcVividInput.addEventListener('input', updateVividCalc);
-calcTmPriceInput.addEventListener('input', updateTmCalc);
-calcTmCadToggle.addEventListener('change', () => {
-  calcTmCadManuallySet = true;
-  calcTmCadToggle.closest('.calculator-cad-toggle').classList.toggle('is-checked', calcTmCadToggle.checked);
-  if(!calcTmCadToggle.checked) calcRateStatus.textContent = '';
-  updateTmCalc();
-});
-calcTmDivisorGrid.addEventListener('click', e => {
-  const btn = e.target.closest('.calculator-divisor-btn');
-  if(!btn) return;
-  calcTmDivisor = parseInt(btn.dataset.divisor, 10);
-  calcTmDivisorGrid.querySelectorAll('.calculator-divisor-btn').forEach(b => b.classList.toggle('active', b === btn));
-  updateTmCalc();
-});
-openCalculatorDirectBtn.addEventListener('click', () => {
-  moreMenuPopover.classList.remove('open');
-  calculatorModal.style.display = 'flex';
-  updateVividCalc();
-  updateTmCalc();
-  calcVividInput.focus();
-});
-calcResetBtn.addEventListener('click', () => {
-  calcVividInput.value = '';
-  calcTmPriceInput.value = '';
-  calcTmCadToggle.checked = false;
-  calcTmCadManuallySet = false;
-  calcTmCadToggle.closest('.calculator-cad-toggle').classList.remove('is-checked');
-  calcRateStatus.textContent = '';
-  calcTmDivisor = 1;
-  calcTmDivisorGrid.querySelectorAll('.calculator-divisor-btn').forEach(b => b.classList.toggle('active', b.dataset.divisor === '1'));
-  updateVividCalc();
-  updateTmCalc();
-  calcVividInput.focus();
-});
-function closeCalculatorModal(){ calculatorModal.style.display = 'none'; }
-closeCalculatorBtn.addEventListener('click', closeCalculatorModal);
-calculatorModal.addEventListener('click', e => { if(e.target === calculatorModal) closeCalculatorModal(); });
 
 const clearPastBtn = $('#clearPastBtn');
 
@@ -4219,15 +3853,15 @@ async function clearActiveSheetEvents(){
 // Delete permissions, by sheet type: your own private sheet is fully
 // yours to clean up freely; US Open is the one sheet only Sam can
 // delete from (though anyone logged in can still edit it — this is
-// specifically about removal); a shared/template sheet (not anyone's
-// private copy, not US Open) is deletable by anyone logged in, same as
-// editing it already was.
+// specifically about removal); an ownerless sheet (no person suffix —
+// same rule as sheetVisibleToCurrentUser) only Sam can delete from too,
+// since only Sam can even see one in the first place.
 function canDeleteFromSheet(sheet){
   if(!sheet || !currentUser) return false;
   if(sheet.mode === 'usopen') return currentUser === 'Sam';
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
-  return true;
+  return currentUser === 'Sam';
 }
 // Removes a single event (and its note/rating/pin/prices) — from the
 // active sheet normally, or from its actual home sheet if it's a
@@ -4535,7 +4169,6 @@ document.addEventListener('keydown', e => {
     moreMenuPopover.classList.remove('open');
     if(addSheetModal.style.display !== 'none') closeAddSheetModal();
     if(insightsModal.style.display !== 'none') closeInsightsModal();
-    if(calculatorModal.style.display !== 'none') closeCalculatorModal();
     if(addShowModal.style.display !== 'none') closeAddShowModal();
     return;
   }
@@ -4773,11 +4406,23 @@ function renderTabs(){
   // real sheets, and search now surfaces trashed items directly when
   // they're actually relevant (see the History-style section in
   // renderSearchResults) rather than needing its own tab to browse.
-  // Admin mode brings it back, since going in to permanently clean
-  // something out is exactly the kind of thing admin mode exists for.
-  // A private presale sheet ("Presale — Shlomo") follows the same
-  // pattern: only visible to the person it belongs to, or to admin.
-  sheetTabs.innerHTML = sheets.filter(s => s.mode !== 'history' && s.mode !== 'accounts' && sheetVisibleToCurrentUser(s)).map(s => `
+  // A private sheet ("Presale — Shlomo") follows the same pattern: only
+  // visible to the person it belongs to.
+  // An ownerless sheet with zero events in it (a leftover default
+  // "Sheet1" Google Sheets creates automatically, something that's
+  // simply never been used) isn't communal — nobody needs to see empty
+  // clutter, Sam included. Only hidden while it's actually empty and
+  // not the one you're currently on; the moment it has real data (or
+  // it's a sheet you just created and haven't pushed to yet — see
+  // pendingEmptySheets), it shows up normally.
+  const isEmptyOwnerlessClutter = s => {
+    if(s.mode === 'usopen') return false;
+    if(/^(.+) — (.+)$/.test(s.name)) return false;
+    if(pendingEmptySheets.includes(s)) return false;
+    if(s.name === activeSheetName) return false;
+    return !remoteCache.some(r => r.appSheet === s.name);
+  };
+  sheetTabs.innerHTML = sheets.filter(s => s.mode !== 'history' && s.mode !== 'accounts' && sheetVisibleToCurrentUser(s) && !isEmptyOwnerlessClutter(s)).map(s => `
     <button class="sheet-tab ${s.name === activeSheetName ? 'active' : ''}" data-name="${escapeHtml(s.name)}" title="${s.mode === 'trash' ? 'Deleted events — restore them or clear them out for good' : 'Drag to reorder — double-click to rename'}" draggable="${s.mode !== 'trash'}">
       <span class="sheet-tab-icon">${s.mode === 'usopen' ? '🎾' : s.mode === 'presale' ? '🎫' : s.mode === 'broadway' ? '🎭' : s.mode === 'trash' ? '🗑' : '🎟️'}</span>
       <span class="tab-label">${escapeHtml(s.name)}</span>
@@ -5394,8 +5039,9 @@ function renderSearchResults(query){
 // permanently removed — scoped the same way regular deleting is: your
 // own stuff is always yours to permanently clear, US Open only Sam can
 // remove (though again, this is specifically about deleting — anyone
-// can still browse and bring back a US Open show), and a shared/
-// template sheet's history is anyone logged in.
+// can still browse and bring back a US Open show), and a sheet with no
+// owner only Sam can, same rule as everywhere else an ownerless sheet
+// shows up.
 function canPermanentlyDeleteHistoryItem(ev){
   if(!currentUser) return false;
   const deletedFrom = ev.deletedFromSheet || '';
@@ -5403,7 +5049,7 @@ function canPermanentlyDeleteHistoryItem(ev){
   if((sheetObj && sheetObj.mode === 'usopen') || deletedFrom === 'US Open') return currentUser === 'Sam';
   const privateMatch = deletedFrom.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
-  return true;
+  return currentUser === 'Sam';
 }
 function historySearchSectionHtml(historicalMatched){
   const sorted = [...historicalMatched].sort((a, b) => new Date(b.dateObj || 0) - new Date(a.dateObj || 0));
