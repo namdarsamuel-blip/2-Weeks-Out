@@ -2123,6 +2123,7 @@ const CAD_RATE_SOURCES = [
   }
 ];
 let cadToUsdRate = null;
+let cadRateDate = null;
 let cadRateFetchPromise = null;
 async function ensureCadRate(){
   if(cadToUsdRate !== null) return cadToUsdRate;
@@ -2138,8 +2139,7 @@ async function ensureCadRate(){
         const { rate, date } = source.parse(data);
         if(!rate || isNaN(rate)) continue;
         cadToUsdRate = rate;
-        calcRateStatus.textContent = `Live rate: 1 CAD = ${formatCalcResult(rate)} USD${date ? ' (' + date + ')' : ''}`;
-        calcRateStatus.classList.remove('is-error');
+        cadRateDate = date || null;
         return rate;
       }catch(err){ /* try the next source */ }
     }
@@ -2192,6 +2192,16 @@ async function updateTmCalc(){
       return;
     }
     usdPrice = price * rate;
+    // Set on every conversion, not just the first-ever fetch — this
+    // used to only get written inside ensureCadRate()'s success branch,
+    // which only runs once per session (later calls return the cached
+    // rate and skip that code entirely), so the CAD→USD detail was only
+    // ever visible the very first time and silently disappeared after.
+    // Shows the actual converted total, not just the eventual per-seat
+    // split — "355 CAD is how much USD" is its own useful number, not
+    // only the rate used to get there.
+    calcRateStatus.classList.remove('is-error');
+    calcRateStatus.textContent = `${formatCalcResult(price)} CAD → ${formatCalcResult(usdPrice)} USD  ·  rate: 1 CAD = ${rate.toFixed(4)} USD${cadRateDate ? ' (' + cadRateDate + ')' : ''}`;
   } else {
     calcRateStatus.textContent = '';
   }
@@ -3329,6 +3339,18 @@ function inferSiteFromUrl(url){
 // checked for.
 const PRESALE_TIME_ONLY_YEAR = 1904;
 
+// Matches both a full month name ("September") and its standard
+// 3-letter abbreviation ("Sep"), case-insensitively — covers both forms
+// showing up in real pasted text without needing two separate checks
+// wherever a month name needs to be resolved.
+const MONTH_NAMES = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+function monthNameToIndex(name){
+  const lower = name.toLowerCase();
+  const full = MONTH_NAMES.indexOf(lower);
+  if(full !== -1) return full;
+  return MONTH_NAMES.findIndex(m => m.startsWith(lower) && lower.length >= 3);
+}
+
 function parseEventDate(str){
   if(!str) return null;
   // "9:00PM" (no space before AM/PM) silently breaks native Date parsing
@@ -3367,6 +3389,32 @@ function parseEventDate(str){
   if(m){
     const [, month, day] = m;
     return inferYearedDate(parseInt(month,10), parseInt(day,10), 0, 0);
+  }
+
+  // e.g. "Sun, Sep 20 at 7:30pm" or "Sep 20, 7:30 PM" — a month-name date
+  // (as opposed to the slash-format one above) with no year given, the
+  // exact shape a site's own "add to calendar" or share text tends to
+  // use. The day-of-week prefix and the word "at" are both optional
+  // here (either "Day, Month D at H:MMam" or "Month D, H:MMam" reads
+  // fine), which is why this needs its own pattern rather than folding
+  // into the very first one above — that one requires a 4-digit year
+  // and a literal "at", neither of which this format has.
+  // {3,9} on both word-matches is load-bearing, not cosmetic: with an
+  // unbounded + instead, an input with no day-of-week ("Sep 20 at
+  // 7:30pm") let the optional prefix greedily eat "Se", leaving just
+  // the stray "p" to backtrack into matching the month-name capture —
+  // a real bug this shape produced when first written. Bounding both
+  // to a realistic month/weekday-name length range closes that off.
+  m = str.match(/^(?:[A-Za-z]{3,9}[,]?\s+)?([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(?:at\s+)?(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if(m){
+    const [, monthName, day, hour, minute, ampm] = m;
+    const monthIdx = monthNameToIndex(monthName);
+    if(monthIdx !== -1){
+      let h = parseInt(hour,10);
+      if(ampm.toUpperCase() === 'PM' && h !== 12) h += 12;
+      if(ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+      return inferYearedDate(monthIdx + 1, parseInt(day,10), h, parseInt(minute,10));
+    }
   }
 
   // e.g. "2026-08-30T16:00:00.000Z" — Google Sheets auto-converts a
