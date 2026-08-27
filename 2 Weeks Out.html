@@ -1887,6 +1887,7 @@ adminModeBtn.addEventListener('click', async () => {
   if(currentUser){
     currentUser = null;
     adminModeOn = false;
+    localStorage.removeItem('ticketWatchLoggedInAs');
     updateAdminModeUI();
     renderTabs();
     render();
@@ -1902,6 +1903,12 @@ adminModeBtn.addEventListener('click', async () => {
     // logged in at all is now the only gate; who you are doesn't change
     // what you can do.
     adminModeOn = true;
+    // Saved on this device until an explicit log-out — no more
+    // re-entering a passcode every time the page reloads. This is a
+    // deliberate trade of the earlier "always resets on reload" safety
+    // default for convenience; logging out is what clears it, same as
+    // any app that remembers you're signed in.
+    localStorage.setItem('ticketWatchLoggedInAs', currentUser);
     updateAdminModeUI();
     renderTabs();
     render();
@@ -7471,6 +7478,16 @@ window.addEventListener('beforeunload', () => { saveNotesNow(); });
 
 async function initApp(){
   applyColumnCount();
+  // Restores whoever was logged in last time on this device — saved by
+  // the login handler above, cleared by explicit log-out. Set before
+  // the first render so the UI (and every visibility check that depends
+  // on currentUser) is correct from the very first paint, not just
+  // after loadAllFromRemote finishes.
+  const savedUser = localStorage.getItem('ticketWatchLoggedInAs');
+  if(savedUser){
+    currentUser = savedUser;
+    adminModeOn = true;
+  }
   updateAdminModeUI();
   if(DEFAULT_SYNC_URL){
     syncUrl = DEFAULT_SYNC_URL;
