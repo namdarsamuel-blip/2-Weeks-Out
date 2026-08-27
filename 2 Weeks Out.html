@@ -2318,7 +2318,7 @@ function activeSheet(){
 function activeSheetMode(){
   const s = activeSheet();
   const m = s && s.mode;
-  return (m === 'usopen' || m === 'presale' || m === 'broadway' || m === 'trash') ? m : 'standard';
+  return (m === 'usopen' || m === 'presale' || m === 'broadway' || m === 'trash' || m === 'history' || m === 'accounts') ? m : 'standard';
 }
 
 // Reflects the active sheet's type in the header, empty-state copy, upload
@@ -2767,7 +2767,7 @@ let remoteSheetsList = []; // [{name, mode}] straight from the backend, in real 
 // before their first upload.
 function rebuildSheetsFromCache(){
   let rebuilt;
-  const normalizeMode = m => (m === 'usopen' || m === 'presale' || m === 'broadway' || m === 'trash') ? m : 'standard';
+  const normalizeMode = m => (m === 'usopen' || m === 'presale' || m === 'broadway' || m === 'trash' || m === 'history' || m === 'accounts') ? m : 'standard';
   if(remoteSheetsList.length){
     rebuilt = remoteSheetsList.map(s => ({ name: s.name, mode: normalizeMode(s.mode) }));
   } else {
