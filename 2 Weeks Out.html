@@ -1777,6 +1777,17 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="passcodeModal" style="display:none;">
+  <div class="modal-box">
+    <h3 class="modal-title" id="passcodeModalTitle">Enter your passcode</h3>
+    <input type="password" inputmode="numeric" autocomplete="off" id="passcodeModalInput" class="calculator-input" style="margin:14px 0;" placeholder="••••">
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="passcodeModalCancel">Cancel</button>
+      <button type="button" class="btn primary" id="passcodeModalOk">OK</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="addShowModal" style="display:none;">
   <div class="modal-box insights-modal calculator-modal">
     <div class="insights-modal-header">
@@ -1925,7 +1936,7 @@ const adminModeBtn = $('#adminModeBtn');
 const adminBadge = $('#adminBadge');
 function updateAdminModeUI(){
   adminBadge.style.display = currentUser ? 'inline' : 'none';
-  adminBadge.textContent = currentUser ? `👤 ${currentUser.toUpperCase()}${adminModeOn ? ' · ADMIN' : ''}` : '';
+  adminBadge.textContent = currentUser ? `👤 ${currentUser.toUpperCase()}` : '';
   adminModeBtn.textContent = currentUser ? `👤 ${currentUser} — click to log out` : '👤 Log in';
   adminModeBtn.classList.toggle('active', !!currentUser);
   clearPastBtn.style.display = adminModeOn ? 'block' : 'none';
@@ -1952,18 +1963,23 @@ function updateAdminModeUI(){
 // A private sheet (name ending in " — {Person}", e.g. "2 weeks out —
 // Shlomo" or "Presale — Shlomo") is only ever visible to the person it
 // belongs to, or to admin — admin needs broader visibility for
-// oversight ("admin can delete stuff" implies seeing what's there to
-// manage, not just their own). US Open is the one deliberate exception:
-// always public, no login needed at all. Everything else — an
-// ownerless "template" sheet like the original "2 weeks out" or
-// "Presale" — is admin-only to view/edit directly; anyone else works
-// from their own private copy instead (see openOrCreateMyPrivateCopyOf
-// below), cloned from the template rather than editing it directly.
+// A private sheet (name ending in " — {Person}", e.g. "2 weeks out —
+// Shlomo" or "Presale — Shlomo") is only ever visible to the person it
+// belongs to — strictly, no exceptions. There's no more separate admin
+// tier that can see everyone's private sheets for oversight; every
+// logged-in person has the same permissions as everyone else, and that
+// includes the same privacy boundary around their own private data.
+// US Open is the one deliberate exception: always public, no login
+// needed at all. Everything else — an ownerless "template" sheet like
+// the original "2 weeks out" or "Presale" — is visible once you're
+// logged in (as anyone), same as Trash/History/Accounts below; from
+// there you can edit the template directly or clone your own private
+// copy (see openOrCreateMyPrivateCopyOf) if you want isolation from it.
 function sheetVisibleToCurrentUser(sheet){
   if(sheet.mode === 'usopen') return true;
   if(sheet.mode === 'trash' || sheet.mode === 'history' || sheet.mode === 'accounts') return adminModeOn;
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
-  if(privateMatch) return adminModeOn || currentUser === privateMatch[2];
+  if(privateMatch) return currentUser === privateMatch[2];
   return adminModeOn;
 }
 // Clearing is normally admin-only, same as every other destructive
@@ -1980,7 +1996,7 @@ function canClearActiveSheet(){
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
   return !!privateMatch && currentUser === privateMatch[2];
 }
-adminModeBtn.addEventListener('click', () => {
+adminModeBtn.addEventListener('click', async () => {
   moreMenuPopover.classList.remove('open');
   if(currentUser){
     currentUser = null;
@@ -1990,12 +2006,16 @@ adminModeBtn.addEventListener('click', () => {
     render();
     return;
   }
-  const entered = prompt('Enter your passcode:');
+  const entered = await promptPasscode('Enter your passcode:');
   if(entered === null) return;
   const person = PEOPLE.find(p => p.passcode === entered.trim());
   if(person){
     currentUser = person.name;
-    adminModeOn = person.isAdmin;
+    // No more separate admin tier — anyone logged in gets full
+    // permissions (delete, clear, see Trash, add accounts, etc). Being
+    // logged in at all is now the only gate; who you are doesn't change
+    // what you can do.
+    adminModeOn = true;
     updateAdminModeUI();
     renderTabs();
     render();
@@ -2013,13 +2033,13 @@ addAccountBtn.addEventListener('click', async () => {
     alert('An account with that name already exists.');
     return;
   }
-  const passcode = prompt(`Passcode for ${name.trim()}:`);
+  const passcode = await promptPasscode(`Passcode for ${name.trim()}:`);
   if(passcode === null || !passcode.trim()) return;
   if(PEOPLE.some(p => p.passcode === passcode.trim())){
     alert('That passcode is already in use by another account — pick a different one.');
     return;
   }
-  const isAdmin = confirm(`Should ${name.trim()} also have admin access (can delete, clear sheets, and see everyone's private sheets)?\n\nOK = yes, admin. Cancel = no, regular account.`);
+  const isAdmin = true; // no more separate admin tier — everyone logged in has full permissions
   await saveNewAccount(name.trim(), passcode.trim(), isAdmin);
   alert(`${name.trim()}'s account is ready — they can log in with their passcode from the "..." menu.`);
 });
@@ -2537,6 +2557,44 @@ let PEOPLE = [
 ];
 let currentUser = null; // one of PEOPLE's names, or null if nobody's logged in
 const ACCOUNTS_SHEET_NAME = '🔑 Accounts';
+// A real password-masked input, unlike the browser's native prompt()
+// (which has no way to hide what's typed — every character just sits
+// there in plain text, visible to anyone glancing at the screen).
+// Promise-based so every existing await prompt(...)-style call site
+// only needs its prompt() swapped for promptPasscode(...) and nothing
+// else about the surrounding logic changes — resolves with the typed
+// value on OK, or null on Cancel/Escape, same contract prompt() has.
+const passcodeModal = $('#passcodeModal');
+const passcodeModalTitle = $('#passcodeModalTitle');
+const passcodeModalInput = $('#passcodeModalInput');
+const passcodeModalOk = $('#passcodeModalOk');
+const passcodeModalCancel = $('#passcodeModalCancel');
+function promptPasscode(title){
+  return new Promise(resolve => {
+    passcodeModalTitle.textContent = title || 'Enter your passcode';
+    passcodeModalInput.value = '';
+    passcodeModal.style.display = 'flex';
+    setTimeout(() => passcodeModalInput.focus(), 30);
+    function cleanup(){
+      passcodeModal.style.display = 'none';
+      passcodeModalOk.removeEventListener('click', onOk);
+      passcodeModalCancel.removeEventListener('click', onCancel);
+      passcodeModal.removeEventListener('click', onOverlay);
+      passcodeModalInput.removeEventListener('keydown', onKeydown);
+    }
+    function onOk(){ const v = passcodeModalInput.value; cleanup(); resolve(v); }
+    function onCancel(){ cleanup(); resolve(null); }
+    function onOverlay(e){ if(e.target === passcodeModal) onCancel(); }
+    function onKeydown(e){
+      if(e.key === 'Enter') onOk();
+      else if(e.key === 'Escape') onCancel();
+    }
+    passcodeModalOk.addEventListener('click', onOk);
+    passcodeModalCancel.addEventListener('click', onCancel);
+    passcodeModal.addEventListener('click', onOverlay);
+    passcodeModalInput.addEventListener('keydown', onKeydown);
+  });
+}
 // Reads whatever's on the Accounts sheet (if it exists yet) and uses
 // that instead of the hardcoded three-person default above — this is
 // what makes "add account" actually persist across reloads and across
@@ -3139,7 +3197,21 @@ function buildEventsAndAnnotations(rows){
 }
 
 function syncActiveSheetFromCache(){
-  const rows = remoteCache.filter(ev => ev.appSheet === activeSheetName);
+  let rows = remoteCache.filter(ev => ev.appSheet === activeSheetName);
+  // Trash holds deletions from EVERY sheet, private ones included — a
+  // person should only ever see what was deleted from a shared sheet,
+  // or from their own private one, never someone else's. Filtered here
+  // (not just at the tab-visibility level) since Trash's own tab is
+  // still shared/reachable by anyone logged in; it's specifically the
+  // CONTENTS that need this extra check.
+  const activeSheetObj = sheets.find(s => s.name === activeSheetName);
+  if(activeSheetObj && activeSheetObj.mode === 'trash'){
+    rows = rows.filter(ev => {
+      const privateMatch = (ev.deletedFromSheet || '').match(/^(.+) — (.+)$/);
+      if(!privateMatch) return true; // came from a shared/template sheet
+      return currentUser === privateMatch[2]; // came from a private sheet - only its owner sees it
+    });
+  }
   const built = buildEventsAndAnnotations(rows);
   allEvents = built.events;
   annotations = built.annotationsMap;
@@ -4164,51 +4236,6 @@ async function deleteSingleEvent(key){
 // is that they keep being normal, editable cards afterward (not parked
 // in a read-only archive), so this always needs a real 'standard' sheet
 // to move them into.
-// Creates (or just switches to, if it's already there) the logged-in
-// person's own private copy of a shared "template" sheet — a real,
-// separate sheet named "{Original} — {Name}", not some filtered view of
-// the shared one. Starts as a snapshot of whatever the template
-// currently has, so nobody's starting from a blank list, but every edit
-// after that only ever touches their own copy — the template and
-// everyone else's private one are untouched by it. Visibility is
-// handled entirely by sheetVisibleToCurrentUser(). Generalized from
-// what used to be presale-only (openOrCreateMyPrivatePresale) — the
-// same "your own copy of a shared starting point" need turned out to
-// apply to every sheet, not just Presale specifically.
-async function openOrCreateMyPrivateCopyOf(templateSheetName){
-  if(!currentUser || !templateSheetName) return;
-  const privateName = `${templateSheetName} — ${currentUser}`;
-  const existing = sheets.find(s => s.name === privateName);
-  if(existing){
-    setActiveSheet(privateName);
-    return;
-  }
-  const template = sheets.find(s => s.name === templateSheetName);
-  const seedEvents = template ? remoteCache.filter(r => r.appSheet === template.name) : [];
-  const newMode = template ? template.mode : 'standard';
-  sheets.push({ name: privateName, mode: newMode });
-  renderTabs();
-  await pushSheetEvents(privateName, newMode, seedEvents);
-  setActiveSheet(privateName);
-}
-// Template sheets (Presale, 2 weeks out, anything else ownerless) are
-// admin-only to view directly, so a non-admin can't just click their
-// tab and see a clone button sitting there — this is how they find out
-// what's available to copy from at all: their names still live in
-// `sheets` (rebuilt from the full remoteCache, which isn't
-// visibility-filtered — only the tab bar rendering is), even though
-// their content isn't shown.
-function pickTemplateToCloneFrom(){
-  const templates = sheets.filter(s => s.mode !== 'trash' && s.mode !== 'history' && s.mode !== 'accounts' && s.mode !== 'usopen' && !/ — /.test(s.name));
-  if(!templates.length){ alert('No shared sheets to make a private copy of yet.'); return null; }
-  const names = templates.map(s => s.name);
-  const chosen = prompt(`Make your own private copy of which sheet?\n${names.join('\n')}`, names[0]);
-  if(chosen === null) return null;
-  const match = templates.find(s => s.name.toLowerCase() === chosen.trim().toLowerCase());
-  if(!match){ alert('No sheet with that exact name.'); return null; }
-  return match.name;
-}
-
 function pickReleaseDestinationSheet(){
   const standardSheets = sheets.filter(s => s.mode === 'standard');
   if(!standardSheets.length){
@@ -4602,7 +4629,14 @@ document.querySelectorAll('input[name="newSheetType"]').forEach(radio => {
 function createSheetFromModal(){
   const type = selectedSheetType(); // 'standard' | 'usopen' | 'presale'
   const defaultName = SHEET_TYPE_DEFAULT_NAMES[type] || `Sheet ${sheets.length + 1}`;
-  const trimmed = newSheetNameInput.value.trim() || defaultName;
+  let trimmed = newSheetNameInput.value.trim() || defaultName;
+  // Every new sheet becomes your own private one automatically the
+  // moment you're logged in — no separate "clone a template" step
+  // needed, it's just yours from the start. US Open is the one
+  // exception, since that's specifically meant to stay shared.
+  if(currentUser && type !== 'usopen' && !trimmed.includes(' — ')){
+    trimmed = `${trimmed} — ${currentUser}`;
+  }
   if(sheets.some(s => s.name === trimmed)){
     alert('A sheet with that name already exists.');
     return;
@@ -4740,7 +4774,7 @@ function renderTabs(){
       <span class="tab-label">${escapeHtml(s.name)}</span>
       ${(s.mode === 'trash' || !adminModeOn) ? '' : `<span class="tab-close" data-name="${escapeHtml(s.name)}" title="Delete sheet">×</span>`}
     </button>
-  `).join('') + `<button class="sheet-tab add-tab" id="addSheetBtn" title="Start a new, separate sheet (name it, choose US Open mode if it needs Day/Night)">+</button>` + (currentUser ? `<button class="sheet-tab add-tab" id="myPrivateCopyBtn" title="Make your own private copy of a shared sheet (Presale, 2 weeks out, etc) — starts as a snapshot, only you (and admin) can see it">🔒 My copy of…</button>` : '');
+  `).join('') + `<button class="sheet-tab add-tab" id="addSheetBtn" title="Start a new sheet — it's automatically your own private one, unless you pick US Open mode, which stays shared">+</button>`;
 
   sheetTabs.querySelectorAll('.sheet-tab:not(.add-tab)').forEach(btn => {
     btn.addEventListener('click', e => {
@@ -4807,11 +4841,6 @@ function renderTabs(){
   });
   const addBtn = document.getElementById('addSheetBtn');
   if(addBtn) addBtn.addEventListener('click', addSheet);
-  const myPresaleBtn = document.getElementById('myPrivateCopyBtn');
-  if(myPresaleBtn) myPresaleBtn.addEventListener('click', () => {
-    const chosen = pickTemplateToCloneFrom();
-    if(chosen) openOrCreateMyPrivateCopyOf(chosen);
-  });
 }
 
 // ---------- Rendering ----------
@@ -5271,7 +5300,11 @@ function renderSearchResults(query){
     // Trash and History live on their own, separate from normal active
     // results — both get their own dedicated section below instead of
     // being mixed in as if they were just another live, editable card.
-    if(ev.__mode === 'trash' || ev.__mode === 'history') return false;
+    // Accounts must never surface here at all, in any form — those rows
+    // hold everyone's actual passcodes, and even showing up as a
+    // confusing, data-less "match" would be a real leak, not just a
+    // display glitch.
+    if(ev.__mode === 'trash' || ev.__mode === 'history' || ev.__mode === 'accounts') return false;
     if(!matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann)) return false;
     // Archived events should stay out of search results by default, same
     // as every other view in the app — otherwise a search brings back
@@ -5288,11 +5321,19 @@ function renderSearchResults(query){
   // live event — so the exact same matchesSearch check (name, venue,
   // note text) works here unchanged; only the sheet-mode filter differs.
   const historicalMatched = events.filter(ev => ev.__mode === 'history' && matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann));
-  // Trash's own tab is hidden from everyday use now (only shows up in
-  // admin mode) — search is how a deleted show stays findable without
-  // needing that tab back. Same matchesSearch check again; only the
-  // sheet-mode differs from the two filters above.
-  const trashMatched = events.filter(ev => ev.__mode === 'trash' && matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann));
+  // Trash's own tab is hidden from everyday use now (only shows up
+  // once logged in) — search is how a deleted show stays findable
+  // without needing that tab back. Same matchesSearch check again; only
+  // the sheet-mode differs from the two filters above. Same "not
+  // someone else's private sheet" check as syncActiveSheetFromCache
+  // applies here too — search must not leak a deletion from someone
+  // else's private sheet just because it happens to match the query.
+  const trashMatched = events.filter(ev => {
+    if(ev.__mode !== 'trash') return false;
+    const privateMatch = (ev.deletedFromSheet || '').match(/^(.+) — (.+)$/);
+    if(privateMatch && currentUser !== privateMatch[2]) return false;
+    return matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann);
+  });
 
   countLabel.textContent = `${matched.length} match${matched.length === 1 ? '' : 'es'} across all sheets`;
 
