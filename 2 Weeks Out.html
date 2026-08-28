@@ -384,9 +384,20 @@
     cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease;
   }
   .heading-release-btn:hover{background:var(--card-hover);border-color:var(--hairline);color:var(--teal);}
+  .heading-note-btn{margin-left:4px;}
+  .heading-note-btn.active{color:var(--amber);}
+  .heading-note-btn:hover{background:var(--card-hover);border-color:var(--hairline);color:var(--amber);}
+  .heading-tour-note{
+    padding:8px 16px;margin:0 0 2px;
+    background:rgba(242,193,78,.06);border-left:2px solid var(--amber);
+    font-size:12px;color:var(--text);opacity:.9;
+    cursor:pointer;white-space:pre-wrap;word-break:break-word;
+  }
+  .heading-tour-note:hover{background:rgba(242,193,78,.1);}
   .day-heading.collapsed .heading-code-btn{display:none;}
   .day-heading.collapsed .heading-release-btn{display:none;}
   .day-heading.collapsed .heading-pin-btn{display:none;}
+  .day-heading.collapsed .heading-note-btn{display:none;}
   /* Presale's artist sub-heading is a narrow, indented row (unlike a
      regular sheet's full-width artist heading), so pushing its icons
      all the way to the far right — same rule that reads fine on a
@@ -1035,7 +1046,6 @@
   /* ---------- Cloud sync ---------- */
   .sync-wrap{position:relative;flex:0 0 auto;}
   .theme-toggle-btn{padding:9px 11px;font-size:14px;line-height:1;}
-  #syncToggleBtn.connected{border-color:var(--teal);color:var(--teal);}
   .sync-popover{
     position:fixed;
     width:300px;
@@ -1073,7 +1083,6 @@
     background:var(--bg);border:1px solid var(--hairline);border-radius:4px;
     padding:2px 6px;color:var(--text);min-width:20px;text-align:center;
   }
-  #moreMenuPopover{width:280px;max-height:70vh;overflow-y:auto;}
   .menu-row-btn{
     display:block;width:100%;text-align:left;
     font-family:'Inter',sans-serif;font-size:13px;font-weight:600;color:var(--text);
@@ -1563,12 +1572,12 @@
   <div class="header-inner">
     <div class="title-block">
       <p class="eyebrow" id="eyebrowLabel">Ticket Watch</p>
-      <h1>Ticket Watch <span class="count" id="countLabel"></span> <span class="admin-badge" id="adminBadge" style="display:none;"></span></h1>
+      <h1>Ticket Watch <span class="count" id="countLabel"></span></h1>
     </div>
     <div class="toolbar">
       <div class="search-wrap">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="searchInput" placeholder="Search name, venue, link, notes…" title="Searches artist/event name, venue, Ticketmaster/VividSeats/StubHub links, notes, and price section labels. Multiple words all have to match, in any field.">
+        <input type="text" id="searchInput" autocomplete="off" placeholder="Search name, venue, link, notes…" title="Searches artist/event name, venue, Ticketmaster/VividSeats/StubHub links, notes, and price section labels. Multiple words all have to match, in any field.">
         <button type="button" id="searchClearBtn" class="search-clear-btn" title="Clear search" style="display:none;">×</button>
       </div>
       <select class="sort-select" id="sortSelect" title="Sort">
@@ -1595,44 +1604,12 @@
       <button class="btn ghost" id="addShowBtn" title="Add a single show by hand — paste a Ticketmaster link and it'll try to pull the date and name out of it for you">+ Add show</button>
       <button class="btn primary" id="uploadBtn" title="Adds to THIS sheet — merges in, refreshes matches, skips duplicates. Use + above instead to start a separate new sheet.">Add CSV</button>
       <input type="file" id="fileInput" accept=".csv">
-      <div class="sync-wrap">
-        <button class="btn ghost" id="syncToggleBtn" title="Sync with Google Sheets">☁ Sync</button>
-        <div class="sync-popover" id="syncPopover">
-          <p class="notes-label">Google Sheets sync</p>
-          <input type="text" id="syncUrlInput" placeholder="Paste your Apps Script Web App URL…">
-          <div class="sync-actions">
-            <button class="btn primary" id="syncConnectBtn" type="button">Connect</button>
-            <button class="btn ghost" id="syncDisconnectBtn" type="button" style="display:none;">Disconnect</button>
-          </div>
-          <p class="sync-status" id="syncStatus">Not connected.</p>
-        </div>
-      </div>
-      <div class="sync-wrap">
-        <button class="btn ghost theme-toggle-btn" id="moreMenuToggleBtn" title="More">⋯</button>
-        <div class="sync-popover" id="moreMenuPopover">
-          <button class="menu-row-btn" id="markSeenBtn" title="Clear the NEW badge from every event on this sheet">✓ Mark all seen</button>
-          <button class="menu-row-btn" id="clearPastBtn" title="Remove events dated before today">🗑 Clear past</button>
-          <button class="menu-row-btn" id="clearBtn" style="display:none;">🗑 Clear data</button>
-          <button class="menu-row-btn" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
-          <button class="menu-row-btn" id="adminModeBtn" title="Log in with your passcode. Everyday edits (notes, star, pin, codes, prices) never need this — it's only for admin actions and your own private copies.">👤 Log in</button>
-          <button class="menu-row-btn" id="addAccountBtn" style="display:none;" title="Create a new named login for someone else — their own passcode, their own private sheets">➕ Add account</button>
-          <div class="menu-row-divider"></div>
-          <p class="notes-label">Keyboard shortcuts</p>
-          <div class="shortcuts-list">
-            <div><kbd>/</kbd> Focus search</div>
-            <div><kbd>j</kbd> <kbd>k</kbd> or <kbd>↓</kbd> <kbd>↑</kbd> Move down / up a row</div>
-            <div><kbd>←</kbd> <kbd>→</kbd> Move to previous / next card</div>
-            <div><kbd>p</kbd> Pin / unpin</div>
-            <div><kbd>n</kbd> Open / close notes</div>
-            <div><kbd>Enter</kbd> Open ticket link</div>
-            <div><kbd>c</kbd> Copy ticket link</div>
-            <div id="deleteShortcutRow"><kbd>Delete</kbd> or <kbd>x</kbd> Delete card</div>
-            <div><kbd>Ctrl</kbd>+<kbd>Z</kbd> Undo</div>
-            <div><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> Redo</div>
-            <div><kbd>Esc</kbd> Close panel / unfocus</div>
-          </div>
-        </div>
-      </div>
+      <button class="btn ghost" id="markSeenBtn" title="Clear the NEW badge from every event on this sheet">✓ Mark all seen</button>
+      <button class="btn ghost" id="clearPastBtn" title="Remove events dated before today" style="display:none;">🗑 Clear past</button>
+      <button class="btn ghost" id="clearBtn" style="display:none;">🗑 Clear data</button>
+      <button class="btn ghost" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
+      <button class="btn ghost" id="addAccountBtn" style="display:none;" title="Create a new named login for someone else — their own passcode, their own private sheets">➕ Add account</button>
+      <button class="btn ghost" id="adminModeBtn" title="Log in with your passcode. Everyday edits (notes, star, pin, codes, prices) never need this — it's only for admin actions and your own private copies.">👤 Log in</button>
     </div>
   </div>
   <div class="sheet-tabs-row">
@@ -1771,12 +1748,6 @@ const sortDateOption = $('#sortDateOption');
 const colMinus = $('#colMinus');
 const colPlus = $('#colPlus');
 const colCount = $('#colCount');
-const syncToggleBtn = $('#syncToggleBtn');
-const syncPopover = $('#syncPopover');
-const syncUrlInput = $('#syncUrlInput');
-const syncConnectBtn = $('#syncConnectBtn');
-const syncDisconnectBtn = $('#syncDisconnectBtn');
-const syncStatus = $('#syncStatus');
 const newFilterBtn = $('#newFilterBtn');
 const archiveFilterBtn = $('#archiveFilterBtn');
 const undoBtn = $('#undoBtn');
@@ -1819,21 +1790,12 @@ const insightsTitle = $('#insightsTitle');
 const insightsBody = $('#insightsBody');
 const closeInsightsBtn = $('#closeInsightsBtn');
 const adminModeBtn = $('#adminModeBtn');
-const adminBadge = $('#adminBadge');
 function updateAdminModeUI(){
-  adminBadge.style.display = currentUser ? 'inline' : 'none';
-  adminBadge.textContent = currentUser ? `👤 ${currentUser.toUpperCase()}` : '';
-  adminModeBtn.textContent = currentUser ? `👤 ${currentUser} — click to log out` : '👤 Log in';
+  adminModeBtn.textContent = currentUser ? `👤 ${currentUser} — log out` : '👤 Log in';
   adminModeBtn.classList.toggle('active', !!currentUser);
   clearPastBtn.style.display = adminModeOn ? 'block' : 'none';
   const addAccountBtn = $('#addAccountBtn');
   if(addAccountBtn) addAccountBtn.style.display = adminModeOn ? 'block' : 'none';
-  // Showing "Delete or x → Delete card" in the shortcuts list to
-  // someone who can't actually use it (they'd just get the "requires
-  // admin mode" alert) is misleading — it should only be listed when
-  // it's genuinely available.
-  const deleteShortcutRow = $('#deleteShortcutRow');
-  if(deleteShortcutRow) deleteShortcutRow.style.display = adminModeOn ? 'block' : 'none';
   // Trash's tab only shows while admin mode is on — if it gets locked
   // while Trash happens to be the active sheet, staying there would
   // leave the tab bar with nothing highlighted (the active tab just
@@ -1842,7 +1804,7 @@ function updateAdminModeUI(){
   // presale sheet that's no longer visible to whoever's now logged in
   // (or logged out) is the same situation, same fix.
   if(activeSheet() && !sheetVisibleToCurrentUser(activeSheet())){
-    const fallback = sheets.find(s => sheetVisibleToCurrentUser(s) && s.mode !== 'trash' && s.mode !== 'history' && s.mode !== 'accounts');
+    const fallback = sheets.find(s => sheetVisibleToCurrentUser(s) && s.mode !== 'trash' && s.mode !== 'history' && s.mode !== 'accounts' && s.mode !== 'tournotes');
     if(fallback) setActiveSheet(fallback.name);
   }
 }
@@ -1862,7 +1824,7 @@ function updateAdminModeUI(){
 // only through search (the "Passed shows" section), and Accounts only
 // through the login/add-account flows.
 function sheetVisibleToCurrentUser(sheet){
-  if(sheet.mode === 'trash' || sheet.mode === 'history' || sheet.mode === 'accounts') return false;
+  if(sheet.mode === 'trash' || sheet.mode === 'history' || sheet.mode === 'accounts' || sheet.mode === 'tournotes') return false;
   if(sheet.mode === 'usopen') return true;
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
@@ -1883,7 +1845,6 @@ function canClearActiveSheet(){
   return currentUser === 'Sam';
 }
 adminModeBtn.addEventListener('click', async () => {
-  moreMenuPopover.classList.remove('open');
   if(currentUser){
     currentUser = null;
     adminModeOn = false;
@@ -1913,12 +1874,33 @@ adminModeBtn.addEventListener('click', async () => {
     renderTabs();
     render();
   } else {
-    alert('Incorrect passcode.');
+    // Passcode doesn't match anyone — rather than just rejecting it,
+    // treat this as a new person signing themselves up: ask for a name
+    // to go with the passcode they already typed, save it the same way
+    // Add Account does, and log them straight in. This is what makes
+    // adding a new person a one-step thing they do themselves, instead
+    // of needing Sam to add them first — no more hardcoding a new
+    // person's name+passcode into the app itself.
+    const wantsToSignUp = confirm(`No account uses that passcode yet. Set up a new account with it?`);
+    if(!wantsToSignUp) return;
+    const name = prompt('Your name:');
+    if(name === null || !name.trim()) return;
+    const trimmedName = name.trim();
+    if(PEOPLE.some(p => p.name.toLowerCase() === trimmedName.toLowerCase())){
+      alert('That name is already taken by another account — log in with your existing passcode instead, or pick a different name.');
+      return;
+    }
+    await saveNewAccount(trimmedName, entered.trim(), true);
+    currentUser = trimmedName;
+    adminModeOn = true;
+    localStorage.setItem('ticketWatchLoggedInAs', currentUser);
+    updateAdminModeUI();
+    renderTabs();
+    render();
   }
 });
 const addAccountBtn = $('#addAccountBtn');
 addAccountBtn.addEventListener('click', async () => {
-  moreMenuPopover.classList.remove('open');
   if(!adminModeOn) return;
   const name = prompt('Name for the new account:');
   if(name === null || !name.trim()) return;
@@ -2196,6 +2178,28 @@ let PEOPLE = [
 ];
 let currentUser = null; // one of PEOPLE's names, or null if nobody's logged in
 const ACCOUNTS_SHEET_NAME = '🔑 Accounts';
+// A note on the whole tour/artist heading, not any one show — kept on
+// its own hidden sheet (same pattern as Accounts) rather than living on
+// any single event, since a heading isn't any one event and the note
+// shouldn't disappear just because the show it happened to be attached
+// to gets deleted or moves. Keyed by the exact heading text, which is
+// already how the app groups shows under one heading in the first
+// place. Synced the same way everything else in this app is — nothing
+// device-local, the Google Sheet is still the only place data lives.
+const TOUR_NOTES_SHEET_NAME = '📝 Tour Notes';
+let tourNotes = {}; // heading text -> note text
+function loadTourNotesFromRemote(){
+  const rows = remoteCache.filter(r => r.appSheet === TOUR_NOTES_SHEET_NAME);
+  tourNotes = {};
+  rows.forEach(r => { if(r.heading) tourNotes[r.heading] = r.note || ''; });
+}
+async function saveTourNote(heading, note){
+  const trimmed = note.trim();
+  if(trimmed) tourNotes[heading] = trimmed;
+  else delete tourNotes[heading];
+  const rows = Object.entries(tourNotes).map(([heading, note]) => ({ heading, note }));
+  await pushSheetEvents(TOUR_NOTES_SHEET_NAME, 'tournotes', rows);
+}
 // A real password-masked input, unlike the browser's native prompt()
 // (which has no way to hide what's typed — every character just sits
 // there in plain text, visible to anyone glancing at the screen).
@@ -2325,7 +2329,7 @@ function activeSheet(){
 function activeSheetMode(){
   const s = activeSheet();
   const m = s && s.mode;
-  return (m === 'usopen' || m === 'presale' || m === 'broadway' || m === 'trash' || m === 'history' || m === 'accounts') ? m : 'standard';
+  return (m === 'usopen' || m === 'presale' || m === 'broadway' || m === 'trash' || m === 'history' || m === 'accounts' || m === 'tournotes') ? m : 'standard';
 }
 
 // Reflects the active sheet's type in the header, empty-state copy, upload
@@ -2422,7 +2426,6 @@ archiveFilterBtn.addEventListener('click', () => {
 clearPastBtn.addEventListener('click', () => {
   if(!adminModeOn){ alert('Clearing requires admin mode — unlock it from the "..." menu.'); return; }
   clearPastEvents();
-  moreMenuPopover.classList.remove('open');
 });
 
 undoBtn.addEventListener('click', () => { undo(); });
@@ -2471,7 +2474,7 @@ async function markAllSeen(){
   render();
   await pushActiveSheetToRemote();
 }
-markSeenBtn.addEventListener('click', () => { markAllSeen(); moreMenuPopover.classList.remove('open'); });
+markSeenBtn.addEventListener('click', () => { markAllSeen(); });
 
 // ---------- Bulk select-and-delete ----------
 // Toggling this turns cards into tap-to-select targets (like picking
@@ -2612,24 +2615,6 @@ confirmDeleteBtn.addEventListener('click', async () => {
   await pushSheetEvents(hist.name, 'history', [...existingHistory, ...toHistory]);
 });
 
-const moreMenuToggleBtn = $('#moreMenuToggleBtn');
-const moreMenuPopover = $('#moreMenuPopover');
-moreMenuToggleBtn.addEventListener('click', e => {
-  e.stopPropagation();
-  // stopPropagation above means the document-level "click outside
-  // closes notes" listener never even sees this click, since it never
-  // bubbles that far — without this, opening the "..." menu while notes
-  // was open left the panel just sitting there open behind it, and felt
-  // exactly like "clicking this took me somewhere instead of closing
-  // notes" even though closing was never actually attempted at all.
-  if(openNotesKey !== null){ closeNotesPanel(); render(); }
-  const opening = !moreMenuPopover.classList.contains('open');
-  if(opening) positionFixedPopover(moreMenuToggleBtn, moreMenuPopover);
-  moreMenuPopover.classList.toggle('open');
-});
-moreMenuPopover.addEventListener('click', e => e.stopPropagation());
-document.addEventListener('click', () => moreMenuPopover.classList.remove('open'));
-
 // Clicking anywhere outside the currently-open notes panel closes it —
 // but if that click landed on a DIFFERENT card entirely (not precisely
 // its notes-preview strip, just anywhere on the card itself: the date,
@@ -2689,22 +2674,20 @@ let syncUrl = null;
 let syncTimer = null;
 const SYNC_POLL_MS = 20000;
 
-// Baked in so the page works with zero setup. Change this (or use the
-// ☁ Sync box to point at a different sheet for this browser session).
+// Baked in so the page works with zero setup — there's no visible sync
+// button anymore to manually connect/disconnect from, the app just
+// always talks to this sheet.
 const DEFAULT_SYNC_URL = 'https://script.google.com/macros/s/AKfycbxjs98Uj7o2LzyQoWlKqdgEOJrxeE0PAm4_8U3vUII4aWraBmkkYgCjDMMKXoywwAt9/exec';
 
+// No visible status text anymore (the sync popover it used to live in
+// is gone), but this is still called from everywhere a sync
+// success/failure happens — kept as a real function (not deleted
+// outright) so none of those call sites need touching, it just no
+// longer has anywhere on screen to display to. lastSyncStatus stays
+// available in memory in case something needs to check it later.
+let lastSyncStatus = { text: '', kind: null };
 function setSyncStatus(text, kind){
-  syncStatus.textContent = text;
-  syncStatus.classList.remove('ok', 'error');
-  if(kind) syncStatus.classList.add(kind);
-}
-
-function updateSyncButtonState(){
-  const connected = !!syncUrl;
-  syncToggleBtn.classList.toggle('connected', connected);
-  syncToggleBtn.textContent = connected ? '☁ Synced' : '☁ Sync';
-  syncConnectBtn.style.display = connected ? 'none' : 'inline-block';
-  syncDisconnectBtn.style.display = connected ? 'inline-block' : 'none';
+  lastSyncStatus = { text, kind: kind || null };
 }
 
 function startSyncPolling(){
@@ -2735,33 +2718,6 @@ function positionFixedPopover(btn, popover){
   popover.style.top = (rect.bottom + 8) + 'px';
 }
 
-syncToggleBtn.addEventListener('click', e => {
-  e.stopPropagation();
-  if(openNotesKey !== null){ closeNotesPanel(); render(); }
-  const opening = !syncPopover.classList.contains('open');
-  if(opening) positionFixedPopover(syncToggleBtn, syncPopover);
-  syncPopover.classList.toggle('open');
-});
-syncPopover.addEventListener('click', e => e.stopPropagation());
-document.addEventListener('click', () => syncPopover.classList.remove('open'));
-
-syncConnectBtn.addEventListener('click', async () => {
-  const url = syncUrlInput.value.trim();
-  if(!url){ setSyncStatus('Paste your Web App URL first.', 'error'); return; }
-  setSyncStatus('Connecting…');
-  syncUrl = url;
-  updateSyncButtonState();
-  await loadAllFromRemote();
-  startSyncPolling();
-});
-
-syncDisconnectBtn.addEventListener('click', () => {
-  syncUrl = null;
-  stopSyncPolling();
-  updateSyncButtonState();
-  setSyncStatus('Not connected — nothing will be saved until you reconnect.', 'error');
-});
-
 window.addEventListener('focus', () => { if(syncUrl) pollRemote(); });
 
 let remoteSheetsList = []; // [{name, mode}] straight from the backend, in real Google Sheets tab order
@@ -2774,7 +2730,7 @@ let remoteSheetsList = []; // [{name, mode}] straight from the backend, in real 
 // before their first upload.
 function rebuildSheetsFromCache(){
   let rebuilt;
-  const normalizeMode = m => (m === 'usopen' || m === 'presale' || m === 'broadway' || m === 'trash' || m === 'history' || m === 'accounts') ? m : 'standard';
+  const normalizeMode = m => (m === 'usopen' || m === 'presale' || m === 'broadway' || m === 'trash' || m === 'history' || m === 'accounts' || m === 'tournotes') ? m : 'standard';
   if(remoteSheetsList.length){
     rebuilt = remoteSheetsList.map(s => ({ name: s.name, mode: normalizeMode(s.mode) }));
   } else {
@@ -2802,7 +2758,7 @@ function pickDefaultSheetName(){
   // ever be picked as what greets you on load — that's exactly the
   // "shouldn't show up during daily use" idea this whole feature exists
   // to protect.
-  const normal = sheets.filter(s => s.mode !== 'trash' && s.mode !== 'history' && s.mode !== 'accounts');
+  const normal = sheets.filter(s => s.mode !== 'trash' && s.mode !== 'history' && s.mode !== 'accounts' && s.mode !== 'tournotes');
   return normal.length ? normal[0].name : (sheets.length ? sheets[0].name : null);
 }
 
@@ -2894,6 +2850,7 @@ async function loadAllFromRemote(){
   remoteCache = data.events;
   remoteSheetsList = Array.isArray(data.sheets) ? data.sheets : [];
   loadPeopleFromRemote();
+  loadTourNotesFromRemote();
   rebuildSheetsFromCache();
   await migrateTrashIntoHistory();
   activeSheetName = pickDefaultSheetName();
@@ -2910,7 +2867,6 @@ async function loadAllFromRemote(){
     collapsedSections = new Set(computePresaleSubHeadingKeys(allEvents));
   }
   render();
-  updateSyncButtonState();
   setSyncStatus(`Synced ${new Date().toLocaleTimeString()}`, 'ok');
 }
 
@@ -4168,82 +4124,12 @@ function selectedEvent(){
 document.addEventListener('keydown', e => {
   const tag = (e.target.tagName || '').toLowerCase();
   const isTyping = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+  if(isTyping) return; // never hijack normal typing
 
-  if(e.key === 'Escape'){
-    if(isTyping) e.target.blur();
-    if(openNotesKey){ closeNotesPanel(); render(); }
-    syncPopover.classList.remove('open');
-    moreMenuPopover.classList.remove('open');
-    if(addSheetModal.style.display !== 'none') closeAddSheetModal();
-    if(insightsModal.style.display !== 'none') closeInsightsModal();
-    if(addShowModal.style.display !== 'none') closeAddShowModal();
-    return;
-  }
-
-  if(e.key === '/' && !isTyping){
-    e.preventDefault();
-    searchInput.focus();
-    searchInput.select();
-    return;
-  }
-
-  // Undo/redo work outside text fields — inside a textarea, Ctrl+Z should
-  // do the browser's native text-undo instead, which isTyping already
-  // routes around since we return early below for typing contexts.
-  if((e.ctrlKey || e.metaKey) && !isTyping){
-    if(e.key === 'z' && !e.shiftKey){ e.preventDefault(); undo(); return; }
-    if(e.key === 'y' || (e.key === 'z' && e.shiftKey)){ e.preventDefault(); redo(); return; }
-  }
-
-  if(isTyping) return; // never hijack normal typing elsewhere
-
-  if(e.key === 'j' || e.key === 'ArrowDown'){ e.preventDefault(); selectByDirection('down'); return; }
-  if(e.key === 'k' || e.key === 'ArrowUp'){ e.preventDefault(); selectByDirection('up'); return; }
+  if(e.key === 'ArrowDown'){ e.preventDefault(); selectByDirection('down'); return; }
+  if(e.key === 'ArrowUp'){ e.preventDefault(); selectByDirection('up'); return; }
   if(e.key === 'ArrowRight'){ e.preventDefault(); selectByDirection('right'); return; }
   if(e.key === 'ArrowLeft'){ e.preventDefault(); selectByDirection('left'); return; }
-
-  if(!selectedKey) return;
-
-  if(e.key === 'p'){
-    pushUndo();
-    const ann = getAnnotation(selectedKey);
-    ann.pinned = !ann.pinned;
-    saveNotesSoon();
-    render();
-    return;
-  }
-  if(e.key === 'n'){
-    const opening = openNotesKey !== selectedKey;
-    if(opening) pushUndo();
-    if(opening) openNotesPanel(selectedKey); else closeNotesPanel();
-    render();
-    if(openNotesKey === selectedKey){
-      const ta = listRoot.querySelector(`[data-key="${CSS.escape(selectedKey)}"] .notes-textarea`);
-      if(ta) ta.focus();
-    }
-    return;
-  }
-  if(e.key === 'Enter'){
-    const ev = selectedEvent();
-    if(ev && ev.primaryLink){
-      window.open(ev.primaryLink, '_blank', 'noopener,noreferrer');
-      window.focus();
-    }
-    return;
-  }
-  if(e.key === 'c'){
-    const ev = selectedEvent();
-    if(ev && ev.primaryLink){
-      copyToClipboard(ev.primaryLink).then(ok => {
-        if(!ok) alert('Could not copy — your browser may be blocking clipboard access.');
-      });
-    }
-    return;
-  }
-  if(e.key === 'Delete' || e.key === 'x'){
-    deleteSingleEvent(selectedKey);
-    return;
-  }
 });
 
 let sheetNameManuallyEdited = false;
@@ -4316,10 +4202,6 @@ cancelAddSheetBtn.addEventListener('click', closeAddSheetModal);
 confirmAddSheetBtn.addEventListener('click', createSheetFromModal);
 addSheetModal.addEventListener('click', e => { if(e.target === addSheetModal) closeAddSheetModal(); });
 newSheetNameInput.addEventListener('keydown', e => { if(e.key === 'Enter') createSheetFromModal(); });
-document.addEventListener('keydown', e => {
-  if(e.key === 'Escape' && addSheetModal.style.display !== 'none') closeAddSheetModal();
-});
-
 function addSheet(){
   openAddSheetModal();
 }
@@ -4429,7 +4311,7 @@ function renderTabs(){
     if(s.name === activeSheetName) return false;
     return !remoteCache.some(r => r.appSheet === s.name);
   };
-  sheetTabs.innerHTML = sheets.filter(s => s.mode !== 'history' && s.mode !== 'accounts' && sheetVisibleToCurrentUser(s) && !isEmptyOwnerlessClutter(s)).map(s => `
+  sheetTabs.innerHTML = sheets.filter(s => s.mode !== 'history' && s.mode !== 'accounts' && s.mode !== 'tournotes' && sheetVisibleToCurrentUser(s) && !isEmptyOwnerlessClutter(s)).map(s => `
     <button class="sheet-tab ${s.name === activeSheetName ? 'active' : ''}" data-name="${escapeHtml(s.name)}" title="${s.mode === 'trash' ? 'Deleted events — restore them or clear them out for good' : 'Drag to reorder — double-click to rename'}" draggable="${s.mode !== 'trash'}">
       <span class="sheet-tab-icon">${s.mode === 'usopen' ? '🎾' : s.mode === 'presale' ? '🎫' : s.mode === 'broadway' ? '🎭' : s.mode === 'trash' ? '🗑' : '🎟️'}</span>
       <span class="tab-label">${escapeHtml(s.name)}</span>
@@ -4965,7 +4847,7 @@ function renderSearchResults(query){
     // hold everyone's actual passcodes, and even showing up as a
     // confusing, data-less "match" would be a real leak, not just a
     // display glitch.
-    if(ev.__mode === 'trash' || ev.__mode === 'history' || ev.__mode === 'accounts') return false;
+    if(ev.__mode === 'trash' || ev.__mode === 'history' || ev.__mode === 'accounts' || ev.__mode === 'tournotes') return false;
     if(!matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann)) return false;
     // Archived events should stay out of search results by default, same
     // as every other view in the app — otherwise a search brings back
@@ -6671,10 +6553,20 @@ function dayHeadingHtml(label, extraHtml = '', pinKeys = null, sectionKeyOverrid
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>
     </button>`;
   }
+  // A note on the whole tour/artist, not any single show — separate
+  // concept from a per-show note, so it gets its own button here rather
+  // than living inside any one card's panel. Highlighted when a note
+  // already exists so it's obvious at a glance there's something to
+  // read, not just something you could add.
+  const existingNote = tourNotes[label] || '';
+  const tourNoteBtn = `<button type="button" class="icon-btn heading-note-btn ${existingNote ? 'active' : ''}" data-action="edit-tour-note" data-heading="${escapeHtml(label)}" title="${existingNote ? 'Edit the note for this tour/artist' : 'Add a note for this whole tour/artist — not tied to any single show'}">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v12H7l-3 3V4z"/><path d="M8 9h8M8 12h5" stroke-dasharray="1.8 1.8"/></svg>
+  </button>`;
+  const tourNotePreview = existingNote ? `<div class="heading-tour-note" data-action="edit-tour-note" data-heading="${escapeHtml(label)}" title="Click to edit">📝 ${escapeHtml(existingNote)}</div>` : '';
   return `<div class="day-heading collapsible-heading ${extraClass} ${collapsed ? 'collapsed' : ''}" data-section="${escapeHtml(key)}">
     <svg class="collapse-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
-    <span class="heading-label">${escapeHtml(label)}</span>${extraHtml}${bulkCodeBtn}${bulkReleaseBtn}${pinBtn}
-  </div>`;
+    <span class="heading-label">${escapeHtml(label)}</span>${extraHtml}${bulkCodeBtn}${bulkReleaseBtn}${tourNoteBtn}${pinBtn}
+  </div>${tourNotePreview}`;
 }
 
 function escapeHtml(str){
@@ -6702,11 +6594,9 @@ fileInput.addEventListener('change', e => {
 clearBtn.addEventListener('click', () => {
   if(!canClearActiveSheet()){ alert('Clearing this sheet requires being logged in as its owner, or as admin.'); return; }
   clearActiveSheetEvents();
-  moreMenuPopover.classList.remove('open');
 });
 
 releaseAllPresaleBtn.addEventListener('click', () => {
-  moreMenuPopover.classList.remove('open');
   if(!allEvents.length) return;
   const keys = allEvents.map(eventKey);
   if(confirm(`Move all ${keys.length} shows off this presale sheet and onto a regular sheet? Their codes, notes, and prices all come with them.`)){
@@ -6880,6 +6770,17 @@ listRoot.addEventListener('click', async e => {
     if(confirm(`Move all ${keys.length} shows in this group off presale and onto a regular sheet? Their codes, notes, and prices all come with them.`)){
       moveEventsFromPresaleToStandard(keys);
     }
+    return;
+  }
+
+  const tourNoteBtn = e.target.closest('[data-action="edit-tour-note"]');
+  if(tourNoteBtn){
+    const heading = tourNoteBtn.dataset.heading;
+    const current = tourNotes[heading] || '';
+    const entered = prompt(`Note for "${heading}" (applies to the whole tour, not any single show):`, current);
+    if(entered === null) return;
+    await saveTourNote(heading, entered);
+    render();
     return;
   }
 
@@ -7478,6 +7379,15 @@ window.addEventListener('beforeunload', () => { saveNotesNow(); });
 
 async function initApp(){
   applyColumnCount();
+  // Some browsers restore a text input's last-typed value across a
+  // reload even with autocomplete="off" set — separate from
+  // autocomplete suggestions, this is the browser's own "remember form
+  // state" behavior. Left alone, a leftover search term here would
+  // silently put the very first render into search mode instead of
+  // showing the normal sheet view, which looks exactly like "nothing
+  // loaded" even though the data's all there. Cleared explicitly so
+  // the app always starts on a real sheet, never mid-search.
+  searchInput.value = '';
   // Restores whoever was logged in last time on this device — saved by
   // the login handler above, cleared by explicit log-out. Set before
   // the first render so the UI (and every visibility check that depends
@@ -7491,9 +7401,7 @@ async function initApp(){
   updateAdminModeUI();
   if(DEFAULT_SYNC_URL){
     syncUrl = DEFAULT_SYNC_URL;
-    syncUrlInput.value = syncUrl;
   }
-  updateSyncButtonState();
   await loadAllFromRemote();
   if(syncUrl) startSyncPolling();
 }
