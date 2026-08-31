@@ -2449,11 +2449,24 @@ function promptText(title, defaultValue){
 // the app persist across reloads and across whoever else opens this
 // page, the same way every other bit of data in the app syncs through
 // the same Google Sheet.
+//
+// Passcode and isAdmin ride along in the "venue" and "primarySite"
+// fields instead of fields named for what they actually are — Code.gs
+// only knows how to write/read the fixed set of columns it uses for
+// ticket events (see its HEADERS array), so a field called "passcode"
+// sent from here would just be silently dropped on the way to the
+// sheet instead of erroring, and every account would vanish on the
+// next reload (this actually happened — accounts appeared to save for
+// the rest of that session, then were gone next time anyone logged in,
+// because the passcode never actually reached the sheet to read back).
+// Piggybacking on fields the backend already round-trips avoids needing
+// to also edit and redeploy Code.gs just to add two account-specific
+// columns.
 function loadPeopleFromRemote(){
   const accountRows = remoteCache.filter(r => r.appSheet === ACCOUNTS_SHEET_NAME);
   if(!accountRows.length) return;
   const loaded = accountRows
-    .map(r => ({ name: (r.name || '').trim(), passcode: String(r.passcode || '').trim(), isAdmin: r.isAdmin === true || r.isAdmin === 'true' }))
+    .map(r => ({ name: (r.name || '').trim(), passcode: String(r.venue || '').trim(), isAdmin: r.primarySite === 'true' }))
     .filter(p => p.name && p.passcode);
   if(loaded.length) PEOPLE = loaded;
 }
@@ -2465,8 +2478,17 @@ function loadPeopleFromRemote(){
 // replace-the-tab mechanism every other sheet edit in this app uses.
 async function saveNewAccount(name, passcode, isAdmin){
   PEOPLE = [...PEOPLE, { name, passcode, isAdmin }];
-  const rows = PEOPLE.map(p => ({ name: p.name, passcode: p.passcode, isAdmin: p.isAdmin }));
+  // See loadPeopleFromRemote's comment on why passcode/isAdmin are sent
+  // as venue/primarySite rather than under their real names.
+  const rows = PEOPLE.map(p => ({ name: p.name, venue: p.passcode, primarySite: p.isAdmin ? 'true' : 'false' }));
   await pushSheetEvents(ACCOUNTS_SHEET_NAME, 'accounts', rows);
+  // pushSheetEvents already refreshed remoteCache with the server's
+  // authoritative response — re-derive PEOPLE from that instead of
+  // trusting the optimistic update above, so two people creating
+  // accounts at nearly the same moment both end up with the complete
+  // list rather than whichever one silently overwrote the other's
+  // locally-optimistic guess.
+  loadPeopleFromRemote();
 }
 let adminModeOn = false;
 let noteSnapshotOnOpen = null; // ann.note captured when the panel opened, so closing can tell if it actually changed
