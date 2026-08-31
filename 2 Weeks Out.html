@@ -1684,7 +1684,6 @@
       <button class="btn danger" id="deleteAllArchivedBtn" title="Permanently remove every archived event on this sheet — sent to History first, so it's still searchable and can be brought back from there" style="display:none;">🗑 Delete archived</button>
       <button class="btn ghost" id="clearBtn" style="display:none;">🗑 Clear data</button>
       <button class="btn ghost" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
-      <button class="btn ghost" id="addAccountBtn" style="display:none;" title="Create a new named login for someone else — their own passcode, their own private sheets">➕ Add login</button>
     </div>
     <button class="btn ghost login-btn-pinned" id="adminModeBtn" title="Log in — pick your name and enter your passcode, or create a new account. Everyday edits (notes, star, pin, codes, prices) never require logging in; it's only for your own private sheets and a few admin-only actions.">👤 Log in</button>
   </div>
@@ -1895,8 +1894,6 @@ function updateAdminModeUI(){
   adminModeBtn.classList.toggle('active', !!currentUser);
   archivePastBtn.style.display = adminModeOn ? 'block' : 'none';
   updateDeleteAllArchivedBtnVisibility();
-  const addAccountBtn = $('#addAccountBtn');
-  if(addAccountBtn) addAccountBtn.style.display = adminModeOn ? 'block' : 'none';
   // Trash's tab only shows while admin mode is on — if it gets locked
   // while Trash happens to be the active sheet, staying there would
   // leave the tab bar with nothing highlighted (the active tab just
@@ -2063,31 +2060,6 @@ async function createAccountFlow(isFirstAccount){
   renderTabs();
   render();
 }
-const addAccountBtn = $('#addAccountBtn');
-addAccountBtn.addEventListener('click', async () => {
-  if(!adminModeOn) return;
-  const name = prompt('Name for the new account:');
-  if(name === null || !name.trim()) return;
-  if(PEOPLE.some(p => p.name.toLowerCase() === name.trim().toLowerCase())){
-    alert('An account with that name already exists.');
-    return;
-  }
-  const passcode = await promptPasscode(`Passcode for ${name.trim()}:`);
-  if(passcode === null || !passcode.trim()) return;
-  if(PEOPLE.some(p => p.passcode === passcode.trim())){
-    alert('That passcode is already in use by another account — pick a different one.');
-    return;
-  }
-  // Regular account by default — the one automatic exception is the
-  // very first account ever created on a fresh sheet (see
-  // createAccountFlow's isFirstAccount), which is the one that becomes
-  // admin. An existing admin isn't given a way to grant admin to
-  // someone else here; that's deliberately out of scope for this
-  // button.
-  const isAdmin = false;
-  await saveNewAccount(name.trim(), passcode.trim(), isAdmin);
-  alert(`${name.trim()}'s account is ready — they can log in by picking their name and entering their passcode.`);
-});
 // "+ Add show" — a fast path for a single show without needing a whole
 // CSV for it. Tries to save some typing when the pasted link is one of
 // Ticketmaster's descriptive-URL style ones (name/venue/date baked
@@ -7606,14 +7578,18 @@ window.addEventListener('beforeunload', () => { saveNotesNow(); });
 async function initApp(){
   applyColumnCount();
   // Some browsers restore a text input's last-typed value across a
-  // reload even with autocomplete="off" set — separate from
-  // autocomplete suggestions, this is the browser's own "remember form
-  // state" behavior. Left alone, a leftover search term here would
-  // silently put the very first render into search mode instead of
-  // showing the normal sheet view, which looks exactly like "nothing
-  // loaded" even though the data's all there. Cleared explicitly so
-  // the app always starts on a real sheet, never mid-search.
-  searchInput.value = '';
+  // reload even with autocomplete="off" set — separate from autocomplete
+  // suggestions, this is the browser's own "remember form state"
+  // behavior (the same mechanism that restores scroll position). Left
+  // alone, a leftover search term here would silently put the very
+  // first render into search mode instead of showing the normal sheet
+  // view, which looks exactly like "nothing loaded" even though the
+  // data's all there. Cleared explicitly so the app always starts on a
+  // real sheet, never mid-search. See clearStaleSearchValue() — this
+  // restoration doesn't always happen synchronously before this line
+  // runs, so a single clear here isn't enough on its own; the extra
+  // catch points registered below are what actually make it reliable.
+  clearStaleSearchValue();
   // Restores whoever was logged in last time on this device — saved by
   // the login handler above, cleared by explicit log-out. Set before
   // the first render so the UI (and every visibility check that depends
@@ -7632,6 +7608,24 @@ async function initApp(){
   if(syncUrl) startSyncPolling();
 }
 initApp();
+// Belt-and-suspenders for the stale-search-value problem described in
+// initApp() above: browser form-state restoration doesn't always land
+// before that first synchronous clear runs, so these catch it at three
+// more points that cover the timings actually seen in practice —
+// shortly after the page settles (rAF, twice, since one frame isn't
+// always enough), on a bfcache/back-forward restore (pageshow with
+// persisted:true skips a fresh page load entirely, so initApp() never
+// reruns without this), and once more after a brief delay as a final
+// backstop. Each one is a no-op if the box is already empty.
+function clearStaleSearchValue(){
+  if(!searchInput.value) return;
+  searchInput.value = '';
+  searchInput.dispatchEvent(new Event('input', { bubbles:true }));
+}
+requestAnimationFrame(() => requestAnimationFrame(clearStaleSearchValue));
+setTimeout(clearStaleSearchValue, 300);
+window.addEventListener('pageshow', clearStaleSearchValue);
+
 </script>
 </body>
 </html>
