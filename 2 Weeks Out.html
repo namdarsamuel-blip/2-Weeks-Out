@@ -1197,6 +1197,19 @@
   .sheet-type-option input{margin-top:3px;flex:0 0 auto;accent-color:var(--amber);width:15px;height:15px;cursor:pointer;}
   .sheet-type-label{display:block;}
   .modal-actions{display:flex;justify-content:flex-end;gap:8px;}
+  /* ---------- Login modal (pick-a-name step) ---------- */
+  .login-name-list{display:flex;flex-direction:column;gap:6px;margin:14px 0;max-height:40vh;overflow-y:auto;}
+  .login-name-btn{
+    display:flex;align-items:center;gap:8px;
+    font-family:'Inter',sans-serif;font-size:14px;font-weight:600;
+    padding:11px 14px;border-radius:8px;
+    border:1px solid var(--hairline);background:var(--bg);color:var(--text);
+    cursor:pointer;text-align:left;width:100%;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .login-name-btn:hover{border-color:var(--teal);background:var(--card-hover);}
+  .login-name-empty{font-size:12.5px;color:var(--muted);margin:14px 0;}
+  .login-create-btn{width:100%;display:flex;justify-content:center;margin-bottom:14px;}
   #deletePasscodeInput{
     font-size:22px;letter-spacing:10px;text-align:center;font-family:'IBM Plex Mono',monospace;
     -webkit-text-security:disc;
@@ -1673,7 +1686,7 @@
       <button class="btn ghost" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
       <button class="btn ghost" id="addAccountBtn" style="display:none;" title="Create a new named login for someone else — their own passcode, their own private sheets">➕ Add login</button>
     </div>
-    <button class="btn ghost login-btn-pinned" id="adminModeBtn" title="Log in with your passcode. Everyday edits (notes, star, pin, codes, prices) never need this — it's only for admin actions and your own private copies.">👤 Log in</button>
+    <button class="btn ghost login-btn-pinned" id="adminModeBtn" title="Log in — pick your name and enter your passcode, or create a new account. Everyday edits (notes, star, pin, codes, prices) never require logging in; it's only for your own private sheets and a few admin-only actions.">👤 Log in</button>
   </div>
   <div class="sheet-tabs-row">
     <div class="sheet-tabs" id="sheetTabs"></div>
@@ -1737,6 +1750,17 @@
     <div class="modal-actions">
       <button class="btn ghost" id="cancelDeletePasscodeBtn" type="button">Cancel</button>
       <button class="btn danger" id="confirmDeletePasscodeBtn" type="button">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="loginModal" style="display:none;">
+  <div class="modal-box">
+    <h3 class="modal-title" id="loginModalTitle">Who's logging in?</h3>
+    <div class="login-name-list" id="loginNameList"></div>
+    <button type="button" class="btn ghost login-create-btn" id="loginCreateAccountBtn">➕ Create new account</button>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="loginModalCancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -1886,40 +1910,41 @@ function updateAdminModeUI(){
   }
 }
 // A private sheet (name ending in " — {Person}", e.g. "2 weeks out —
-// Shlomo" or "Presale — Shlomo") is only ever visible to the person it
-// belongs to — strictly, no exceptions. US Open is the one deliberate
-// exception: always public, no login needed at all. An ownerless
-// "template" sheet (no person suffix — legacy sheets like the original
-// "2 weeks out" from before this account system existed, or anything
-// created while nobody was logged in) belongs to nobody in particular,
-// so it defaults to Sam rather than being visible to everyone logged
-// in — Shlomo seeing a sheet he never created just because it happens
-// to have no owner would defeat the whole point of "you only see what
-// you made." Trash no longer exists as a concept at all (deleting now
-// goes straight to History), and neither Trash nor History nor Accounts
-// ever appear as a tab for anyone, including Sam — History is reached
-// only through search (the "Passed shows" section), and Accounts only
+// Priya") is only ever visible to the person it belongs to — strictly,
+// no exceptions. US Open is the one deliberate exception: always
+// public, no login needed at all. An ownerless "template" sheet (no
+// person suffix — legacy sheets from before this account system
+// existed, or anything created while nobody was logged in) belongs to
+// nobody in particular, so it defaults to whoever holds the admin
+// account rather than being visible to everyone logged in — someone
+// seeing a sheet they never created just because it happens to have no
+// owner would defeat the whole point of "you only see what you made."
+// Trash no longer exists as a concept at all (deleting now goes
+// straight to History), and neither Trash nor History nor Accounts ever
+// appear as a tab for anyone, admin included — History is reached only
+// through search (the "Passed shows" section), and Accounts only
 // through the login/add-account flows.
 function sheetVisibleToCurrentUser(sheet){
   if(sheet.mode === 'trash' || sheet.mode === 'history' || sheet.mode === 'accounts' || sheet.mode === 'tournotes') return false;
   if(sheet.mode === 'usopen') return true;
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
-  return currentUser === 'Sam';
+  return currentUserIsAdmin();
 }
 // Clearing is normally admin-only, same as every other destructive
 // action — but a private sheet is genuinely yours ("2 weeks out —
-// Shlomo" isn't shared with anyone), and presale specifically changes
-// every day, so waiting on Sam just to start it over each day would be
-// exactly the wrong kind of friction. The owner of a private sheet can
-// clear their own freely; US Open or an ownerless sheet only Sam can.
+// Priya" isn't shared with anyone), and presale specifically changes
+// every day, so waiting on an admin just to start it over each day
+// would be exactly the wrong kind of friction. The owner of a private
+// sheet can clear their own freely; US Open or an ownerless sheet only
+// an admin account can.
 function canClearActiveSheet(){
   const sheet = activeSheet();
   if(!sheet || !currentUser) return false;
-  if(sheet.mode === 'usopen') return currentUser === 'Sam';
+  if(sheet.mode === 'usopen') return currentUserIsAdmin();
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
-  return currentUser === 'Sam';
+  return currentUserIsAdmin();
 }
 adminModeBtn.addEventListener('click', async () => {
   if(currentUser){
@@ -1931,51 +1956,113 @@ adminModeBtn.addEventListener('click', async () => {
     render();
     return;
   }
-  const entered = await promptPasscode('Enter your passcode:');
-  if(entered === null) return;
-  const person = PEOPLE.find(p => p.passcode === entered.trim());
-  if(person){
-    currentUser = person.name;
-    // No more separate admin tier — anyone logged in gets full
-    // permissions (delete, clear, see Trash, add accounts, etc). Being
-    // logged in at all is now the only gate; who you are doesn't change
-    // what you can do.
-    adminModeOn = true;
-    // Saved on this device until an explicit log-out — no more
-    // re-entering a passcode every time the page reloads. This is a
-    // deliberate trade of the earlier "always resets on reload" safety
-    // default for convenience; logging out is what clears it, same as
-    // any app that remembers you're signed in.
-    localStorage.setItem('ticketWatchLoggedInAs', currentUser);
-    updateAdminModeUI();
-    renderTabs();
-    render();
-  } else {
-    // Passcode doesn't match anyone — rather than just rejecting it,
-    // treat this as a new person signing themselves up: ask for a name
-    // to go with the passcode they already typed, save it the same way
-    // Add Account does, and log them straight in. This is what makes
-    // adding a new person a one-step thing they do themselves, instead
-    // of needing Sam to add them first — no more hardcoding a new
-    // person's name+passcode into the app itself.
-    const wantsToSignUp = confirm(`No account uses that passcode yet. Set up a new account with it?`);
-    if(!wantsToSignUp) return;
-    const name = prompt('Your name:');
-    if(name === null || !name.trim()) return;
-    const trimmedName = name.trim();
-    if(PEOPLE.some(p => p.name.toLowerCase() === trimmedName.toLowerCase())){
-      alert('That name is already taken by another account — log in with your existing passcode instead, or pick a different name.');
-      return;
-    }
-    await saveNewAccount(trimmedName, entered.trim(), true);
-    currentUser = trimmedName;
-    adminModeOn = true;
-    localStorage.setItem('ticketWatchLoggedInAs', currentUser);
-    updateAdminModeUI();
-    renderTabs();
-    render();
+  // Nobody's ever created an account on this sheet yet — skip straight
+  // to creating the first one instead of showing an empty name list
+  // with nothing to pick from.
+  if(!PEOPLE.length){
+    await createAccountFlow(true);
+    return;
   }
+  const choice = await promptLoginChoice();
+  if(choice === null) return;
+  if(choice === CREATE_NEW_ACCOUNT){
+    await createAccountFlow(false);
+    return;
+  }
+  // A name was picked from the list — now confirm it's really them with
+  // their own passcode, checked against that specific person's entry
+  // (not matched blindly against everyone's passcodes the way the old
+  // single-box flow did).
+  const person = PEOPLE.find(p => p.name === choice);
+  if(!person) return;
+  const entered = await promptPasscode(`Passcode for ${choice}:`);
+  if(entered === null) return;
+  if(entered.trim() !== person.passcode){
+    alert('Wrong passcode for ' + choice + '.');
+    return;
+  }
+  currentUser = person.name;
+  // Being logged in at all is the only gate for everyday actions; the
+  // handful of admin-only actions check currentUserIsAdmin() instead
+  // (see its definition), which looks at this specific account's own
+  // isAdmin flag.
+  adminModeOn = true;
+  // Saved on this device until an explicit log-out — no re-entering a
+  // passcode every time the page reloads. Logging out is what clears
+  // it, same as any app that remembers you're signed in.
+  localStorage.setItem('ticketWatchLoggedInAs', currentUser);
+  updateAdminModeUI();
+  renderTabs();
+  render();
 });
+// Sentinel returned by promptLoginChoice() when "Create new account" is
+// picked instead of an existing name — distinct from any real name and
+// from null (which means the whole modal was cancelled).
+const CREATE_NEW_ACCOUNT = Symbol('create-new-account');
+const loginModal = $('#loginModal');
+const loginNameList = $('#loginNameList');
+const loginCreateAccountBtn = $('#loginCreateAccountBtn');
+const loginModalCancel = $('#loginModalCancel');
+// The "who is this" step — a real list of existing accounts to tap,
+// rather than typing a passcode blind and having it matched against
+// everyone. Resolves to the chosen name, CREATE_NEW_ACCOUNT, or null if
+// cancelled.
+function promptLoginChoice(){
+  return new Promise(resolve => {
+    loginNameList.innerHTML = PEOPLE.map(p =>
+      `<button type="button" class="login-name-btn" data-name="${escapeHtml(p.name)}">👤 ${escapeHtml(p.name)}</button>`
+    ).join('');
+    loginModal.style.display = 'flex';
+    function cleanup(){
+      loginModal.style.display = 'none';
+      loginNameList.removeEventListener('click', onListClick);
+      loginCreateAccountBtn.removeEventListener('click', onCreate);
+      loginModalCancel.removeEventListener('click', onCancel);
+      loginModal.removeEventListener('click', onOverlay);
+    }
+    function onListClick(e){
+      const btn = e.target.closest('.login-name-btn');
+      if(!btn) return;
+      cleanup();
+      resolve(btn.dataset.name);
+    }
+    function onCreate(){ cleanup(); resolve(CREATE_NEW_ACCOUNT); }
+    function onCancel(){ cleanup(); resolve(null); }
+    function onOverlay(e){ if(e.target === loginModal) onCancel(); }
+    loginNameList.addEventListener('click', onListClick);
+    loginCreateAccountBtn.addEventListener('click', onCreate);
+    loginModalCancel.addEventListener('click', onCancel);
+    loginModal.addEventListener('click', onOverlay);
+  });
+}
+// Self-serve account creation — name plus a passcode they pick
+// themselves, no admin needed to set someone up first. isFirstAccount
+// is what decides whether this becomes the admin account: the very
+// first account on a brand-new sheet gets isAdmin:true automatically
+// (something has to hold the few admin-gated permissions), and every
+// account created after that starts as a regular, non-admin account.
+async function createAccountFlow(isFirstAccount){
+  const name = prompt(isFirstAccount ? "Create the first account on this sheet — what's your name?" : 'Your name:');
+  if(name === null || !name.trim()) return;
+  const trimmedName = name.trim();
+  if(PEOPLE.some(p => p.name.toLowerCase() === trimmedName.toLowerCase())){
+    alert('That name is already taken — log in with that account instead, or pick a different name.');
+    return;
+  }
+  const passcode = await promptPasscode(`Choose a passcode for ${trimmedName}:`);
+  if(passcode === null || !passcode.trim()) return;
+  if(PEOPLE.some(p => p.passcode === passcode.trim())){
+    alert('That passcode is already in use by another account — pick a different one.');
+    return;
+  }
+  await saveNewAccount(trimmedName, passcode.trim(), isFirstAccount);
+  currentUser = trimmedName;
+  adminModeOn = true;
+  localStorage.setItem('ticketWatchLoggedInAs', currentUser);
+  updateAdminModeUI();
+  renderTabs();
+  render();
+}
 const addAccountBtn = $('#addAccountBtn');
 addAccountBtn.addEventListener('click', async () => {
   if(!adminModeOn) return;
@@ -1991,9 +2078,15 @@ addAccountBtn.addEventListener('click', async () => {
     alert('That passcode is already in use by another account — pick a different one.');
     return;
   }
-  const isAdmin = true; // no more separate admin tier — everyone logged in has full permissions
+  // Regular account by default — the one automatic exception is the
+  // very first account ever created on a fresh sheet (see
+  // createAccountFlow's isFirstAccount), which is the one that becomes
+  // admin. An existing admin isn't given a way to grant admin to
+  // someone else here; that's deliberately out of scope for this
+  // button.
+  const isAdmin = false;
   await saveNewAccount(name.trim(), passcode.trim(), isAdmin);
-  alert(`${name.trim()}'s account is ready — they can log in with their passcode from the "..." menu.`);
+  alert(`${name.trim()}'s account is ready — they can log in by picking their name and entering their passcode.`);
 });
 // "+ Add show" — a fast path for a single show without needing a whole
 // CSV for it. Tries to save some typing when the pasted link is one of
@@ -2240,29 +2333,31 @@ function savePinnedJumpNames(){
 }
 let pinnedJumpNames = loadPinnedJumpNames();
 let openNotesKey = null; // eventKey of the one card whose notes panel is expanded, if any
-// One login flow covers both "who is this" and "does this unlock admin
-// actions" — Sam's passcode is deliberately the same as admin's, since
-// Sam effectively IS the admin account with a name on it rather than a
-// separate thing. Logging in as Sam sets both currentUser AND
-// adminModeOn; logging in as anyone else sets currentUser only.
-// Deliberately NOT persisted to localStorage, same reasoning as before
-// admin mode had a name attached to it: resets to logged-out on every
-// reload, so a shared/left-open tab never sits unlocked indefinitely.
+// adminModeOn just tracks "is anyone logged in at all" — every logged-in
+// account gets full day-to-day permissions (notes, star, pin, codes,
+// prices, archiving). The handful of genuinely sensitive actions
+// (deleting from US Open, an ownerless sheet) check currentUserIsAdmin()
+// specifically instead, which looks up the logged-in person's own
+// isAdmin flag on their PEOPLE entry — never a hardcoded name. Login
+// persists in localStorage until an explicit log-out (see
+// 'ticketWatchLoggedInAs' below), so this doesn't reset on reload.
 //
 // PEOPLE itself lives on a dedicated, hidden "🔑 Accounts" sheet on the
-// Google Sheet backend (see loadPeopleFromRemote/savePeopleToRemote) —
-// not hardcoded here — so admin can add a new person (a new
-// name+passcode) directly from the app and it's there for everyone on
-// the next load, the same way any other data in this app syncs. This
-// array is just the in-memory copy, seeded with the three original
-// accounts as a fallback for the very first load before the Accounts
-// sheet exists yet.
-let PEOPLE = [
-  { name: 'Sam', passcode: '2121', isAdmin: true },
-  { name: 'Shlomo', passcode: '7032', isAdmin: false },
-  { name: 'Eitan', passcode: '0000', isAdmin: false }
-];
+// Google Sheet backend (see loadPeopleFromRemote/saveNewAccount) — never
+// hardcoded here. No default accounts are seeded either: the very first
+// person to hit "Log in" on a brand-new sheet is walked straight into
+// creating the first account (see the adminModeBtn handler below), and
+// that first account is the one that gets isAdmin:true — every account
+// after that starts as a regular (non-admin) account. Whoever holds
+// isAdmin is the one this app's few admin-gated actions (deleting from
+// US Open, an ownerless sheet) check against, via currentUserIsAdmin()
+// — never a specific name.
+let PEOPLE = [];
 let currentUser = null; // one of PEOPLE's names, or null if nobody's logged in
+function currentUserIsAdmin(){
+  const person = PEOPLE.find(p => p.name === currentUser);
+  return !!(person && person.isAdmin);
+}
 const ACCOUNTS_SHEET_NAME = '🔑 Accounts';
 // A note on the whole tour/artist heading, not any one show — kept on
 // its own hidden sheet (same pattern as Accounts) rather than living on
@@ -2324,11 +2419,12 @@ function promptPasscode(title){
     passcodeModalInput.addEventListener('keydown', onKeydown);
   });
 }
-// Reads whatever's on the Accounts sheet (if it exists yet) and uses
-// that instead of the hardcoded three-person default above — this is
-// what makes "add account" actually persist across reloads and across
-// whoever else opens this page, the same way every other bit of data
-// in the app syncs through the same Google Sheet.
+// Reads whatever's on the Accounts sheet (if it exists yet) — starts
+// out empty (see the PEOPLE declaration above) until this actually
+// finds rows there, which is what makes every account created through
+// the app persist across reloads and across whoever else opens this
+// page, the same way every other bit of data in the app syncs through
+// the same Google Sheet.
 function loadPeopleFromRemote(){
   const accountRows = remoteCache.filter(r => r.appSheet === ACCOUNTS_SHEET_NAME);
   if(!accountRows.length) return;
@@ -2517,7 +2613,7 @@ archivePastBtn.addEventListener('click', () => {
 
 deleteAllArchivedBtn.addEventListener('click', () => {
   if(!canDeleteFromSheet(activeSheet())){
-    alert(activeSheetMode() === 'usopen' ? 'Only Sam can delete from US Open — everyone can still edit it freely.' : 'You can only delete from your own sheet.');
+    alert(activeSheetMode() === 'usopen' ? 'Only an admin account can delete from US Open — everyone can still edit it freely.' : 'You can only delete from your own sheet.');
     return;
   }
   deleteAllArchivedEvents();
@@ -2688,7 +2784,7 @@ confirmArchiveBtn.addEventListener('click', async () => {
 confirmDeleteBtn.addEventListener('click', async () => {
   if(!selectedKeys.size) return;
   if(!canDeleteFromSheet(activeSheet())){
-    alert(activeSheetMode() === 'usopen' ? 'Only Sam can delete from US Open — everyone can still edit it freely.' : 'You can only delete from your own sheet.');
+    alert(activeSheetMode() === 'usopen' ? 'Only an admin account can delete from US Open — everyone can still edit it freely.' : 'You can only delete from your own sheet.');
     return;
   }
   pushUndo();
@@ -3909,17 +4005,18 @@ async function clearActiveSheetEvents(){
 }
 
 // Delete permissions, by sheet type: your own private sheet is fully
-// yours to clean up freely; US Open is the one sheet only Sam can
-// delete from (though anyone logged in can still edit it — this is
-// specifically about removal); an ownerless sheet (no person suffix —
-// same rule as sheetVisibleToCurrentUser) only Sam can delete from too,
-// since only Sam can even see one in the first place.
+// yours to clean up freely; US Open is the one sheet only an admin
+// account can delete from (though anyone logged in can still edit it —
+// this is specifically about removal); an ownerless sheet (no person
+// suffix — same rule as sheetVisibleToCurrentUser) only an admin can
+// delete from too, since only an admin can even see one in the first
+// place.
 function canDeleteFromSheet(sheet){
   if(!sheet || !currentUser) return false;
-  if(sheet.mode === 'usopen') return currentUser === 'Sam';
+  if(sheet.mode === 'usopen') return currentUserIsAdmin();
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
-  return currentUser === 'Sam';
+  return currentUserIsAdmin();
 }
 // Removes a single event (and its note/rating/pin/prices) — from the
 // active sheet normally, or from its actual home sheet if it's a
@@ -3930,7 +4027,7 @@ async function deleteSingleEvent(key){
   const inActive = allEvents.find(e => eventKey(e) === key);
   if(inActive){
     if(!canDeleteFromSheet(activeSheet())){
-      alert(activeSheetMode() === 'usopen' ? 'Only Sam can delete from US Open — everyone can still edit it freely.' : 'You can only delete from your own sheet.');
+      alert(activeSheetMode() === 'usopen' ? 'Only an admin account can delete from US Open — everyone can still edit it freely.' : 'You can only delete from your own sheet.');
       return;
     }
     pushUndo();
@@ -4420,12 +4517,12 @@ function renderTabs(){
   // real sheets, and search now surfaces trashed items directly when
   // they're actually relevant (see the History-style section in
   // renderSearchResults) rather than needing its own tab to browse.
-  // A private sheet ("Presale — Shlomo") follows the same pattern: only
+  // A private sheet ("Presale — Priya") follows the same pattern: only
   // visible to the person it belongs to.
   // An ownerless sheet with zero events in it (a leftover default
   // "Sheet1" Google Sheets creates automatically, something that's
   // simply never been used) isn't communal — nobody needs to see empty
-  // clutter, Sam included. Only hidden while it's actually empty and
+  // clutter, admin included. Only hidden while it's actually empty and
   // not the one you're currently on; the moment it has real data (or
   // it's a sheet you just created and haven't pushed to yet — see
   // pendingEmptySheets), it shows up normally.
@@ -5052,19 +5149,19 @@ function renderSearchResults(query){
 // currently live for them. Each past show keeps its old note and code
 // visible, can be brought back onto a real sheet with one click, or
 // permanently removed — scoped the same way regular deleting is: your
-// own stuff is always yours to permanently clear, US Open only Sam can
-// remove (though again, this is specifically about deleting — anyone
-// can still browse and bring back a US Open show), and a sheet with no
-// owner only Sam can, same rule as everywhere else an ownerless sheet
-// shows up.
+// own stuff is always yours to permanently clear, US Open only an admin
+// account can remove (though again, this is specifically about
+// deleting — anyone can still browse and bring back a US Open show),
+// and a sheet with no owner only an admin can, same rule as everywhere
+// else an ownerless sheet shows up.
 function canPermanentlyDeleteHistoryItem(ev){
   if(!currentUser) return false;
   const deletedFrom = ev.deletedFromSheet || '';
   const sheetObj = sheets.find(s => s.name === deletedFrom);
-  if((sheetObj && sheetObj.mode === 'usopen') || deletedFrom === 'US Open') return currentUser === 'Sam';
+  if((sheetObj && sheetObj.mode === 'usopen') || deletedFrom === 'US Open') return currentUserIsAdmin();
   const privateMatch = deletedFrom.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
-  return currentUser === 'Sam';
+  return currentUserIsAdmin();
 }
 function historySearchSectionHtml(historicalMatched){
   const sorted = [...historicalMatched].sort((a, b) => new Date(b.dateObj || 0) - new Date(a.dateObj || 0));
