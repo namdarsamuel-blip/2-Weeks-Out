@@ -158,26 +158,34 @@
 
   .toolbar{
     display:flex;gap:8px;align-items:center;
-    /* flex-basis:0 (not auto) is what actually fixes the wrap bug below
-       — flex-wrap's line-breaking decision is made using each item's
-       HYPOTHETICAL size (its content-based size before any
-       shrinking/growing is applied), not its final post-shrink size, so
-       min-width:0 alone doesn't stop a wide toolbar from tripping
-       .header-inner's wrap once its content is large enough — only a
-       small hypothetical size (flex-basis:0) does, letting flex-grow
-       expand it afterward to fill whatever's actually left next to the
-       title. That's the mechanism behind the whole bug this fixes: a
-       selection-count button going from "Archive" to "Archive (1)" grew
-       the toolbar's content just enough to push its hypothetical size
-       over the line, header-inner would wrap it to a new row, every
-       card below shifted down, and a second click aimed at a checkbox
-       would land wherever that old screen position now happened to be
-       instead — which is the actual mechanism behind drag-selecting
-       feeling "very glitchy". */
+    /* flex-basis:0 (not auto) keeps the toolbar itself from ever being
+       the reason .header-inner wraps title/toolbar/login onto separate
+       rows — flex-wrap's line-breaking decision is made using each
+       item's HYPOTHETICAL size (its content-based size before any
+       shrinking/growing/wrapping is applied), so min-width:0 alone
+       wouldn't do it; a small hypothetical size (flex-basis:0) is what's
+       needed, letting flex-grow expand it afterward to fill whatever's
+       actually left next to the title. */
     flex:1 1 0%;min-width:0;
-    flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
-    scrollbar-width:thin;-webkit-overflow-scrolling:touch;
+    /* Buttons wrap onto as many rows as needed instead of scrolling
+       sideways — every button stays reachable without a swipe/scroll,
+       which matters most on phones where a dozen-plus buttons can't
+       fit in one row at all. This used to be nowrap+horizontal-scroll
+       specifically to dodge a drag-select bug: the Archive/Delete
+       confirm buttons' text used to grow with the selection count
+       ("Archive" → "Archive (1)"), which changed their hypothetical
+       width mid-drag and reflowed everything below, so a second click
+       aimed at a checkbox could land on the wrong card. That's now
+       fixed at the source instead — those two buttons have a fixed
+       min-width (see #confirmArchiveBtn below) so their box size never
+       changes as the count changes, which means wrapping here is safe
+       even while a drag-select is in progress. */
+    flex-wrap:wrap;row-gap:8px;
   }
+  /* Locks the box size regardless of the digit(s) inside the
+     parentheses — see the .toolbar comment above for why this matters
+     beyond just visual tidiness. */
+  #confirmArchiveBtn, #confirmDeleteBtn{min-width:118px;text-align:center;}
   /* Sits outside .toolbar's own internal scroll area entirely — it used
      to be the last button in that scrollable row, which meant it could
      get pushed out of view (and unclickable without manually scrolling)
@@ -187,9 +195,6 @@
      you log out — so it's a separate flex child of the header now,
      never inside the part that scrolls or shrinks. */
   .login-btn-pinned{flex:0 0 auto;}
-  .toolbar::-webkit-scrollbar{height:5px;}
-  .toolbar::-webkit-scrollbar-thumb{background:var(--hairline);border-radius:3px;}
-  .toolbar::-webkit-scrollbar-track{background:transparent;}
   /* Every button keeps its natural size — only the search box is
      allowed to shrink (down to its own min-width), same division of
      space as before. */
@@ -205,7 +210,10 @@
   }
   .sort-select:hover{border-color:var(--muted);}
   .sort-select:focus{outline:none;border-color:var(--teal);}
-  .search-wrap{position:relative;flex:1 1 200px;min-width:160px;}
+  /* max-width keeps the search box from growing so wide it eats the
+     room the rest of the buttons need to share a row — it still grows
+     to fill genuinely leftover space, just not without limit. */
+  .search-wrap{position:relative;flex:1 1 200px;min-width:160px;max-width:340px;}
   .search-wrap input{
     width:100%;
     background:var(--card);
@@ -1544,19 +1552,23 @@
        open notes panel to make room from — span is meaningless here. */
     .day-grid .ticket:has(.notes-panel){grid-column:span 1;}
 
-    /* Header: same single toolbar row as desktop — search plus every
-       button in the same left-to-right order — just sized for touch and
-       left to scroll sideways (see .toolbar's overflow-x rule) instead
-       of restructuring into a different, phone-only layout. */
+    /* Header: same buttons, same left-to-right order as desktop — just
+       sized for touch and free to wrap onto as many rows as it takes
+       (see .toolbar's flex-wrap rule) instead of a phone-only layout or
+       any button being off-screen behind a scroll/swipe. */
     .header-inner{padding:0;gap:10px;}
-    .toolbar{gap:6px;}
+    /* flex-basis:100% pushes the toolbar onto its own full-width row
+       below the title instead of squeezing into whatever narrow sliver
+       is left beside it — that sliver is what forced every button onto
+       its own line on a phone. Full width means several buttons can
+       actually share each wrapped row. */
+    .toolbar{gap:6px;flex-basis:100%;}
     /* Without a cap, search's flex-grow (needed on desktop to fill
-       leftover space next to fixed-width buttons) instead grows to fill
-       the ENTIRE scrollable toolbar width at phone sizes — every other
-       button gets pushed off past the right edge, reachable only by a
-       long swipe. A fixed width here keeps search reasonably sized and
-       leaves the rest of the row visible right next to it, same as
-       every other button. */
+       leftover space next to fixed-width buttons) instead grows to
+       claim most of its wrapped row's width at phone sizes, crowding
+       out whatever else would've shared that row. A fixed width here
+       keeps search reasonably sized and leaves room for other buttons
+       to share its line. */
     .search-wrap{flex:0 0 180px;}
     .toolbar .btn, .toolbar .filter-btn{padding:9px 10px;font-size:12.5px;}
     #colStepper{display:none;}
@@ -1634,7 +1646,8 @@
       <button class="btn primary" id="uploadBtn" title="Adds to THIS sheet — merges in, refreshes matches, skips duplicates. Use + above instead to start a separate new sheet.">Add CSV</button>
       <input type="file" id="fileInput" accept=".csv">
       <button class="btn ghost" id="markSeenBtn" title="Clear the NEW badge from every event on this sheet">✓ Mark all seen</button>
-      <button class="btn ghost" id="clearPastBtn" title="Remove events dated before today" style="display:none;">🗑 Clear past</button>
+      <button class="btn ghost" id="archivePastBtn" title="Archive every event dated before today — moves them out of the main view into Archive, nothing is deleted" style="display:none;">📦 Archive past</button>
+      <button class="btn danger" id="deleteAllArchivedBtn" title="Permanently remove every archived event on this sheet — sent to History first, so it's still searchable and can be brought back from there" style="display:none;">🗑 Delete archived</button>
       <button class="btn ghost" id="clearBtn" style="display:none;">🗑 Clear data</button>
       <button class="btn ghost" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
       <button class="btn ghost" id="addAccountBtn" style="display:none;" title="Create a new named login for someone else — their own passcode, their own private sheets">➕ Add account</button>
@@ -1822,7 +1835,8 @@ const adminModeBtn = $('#adminModeBtn');
 function updateAdminModeUI(){
   adminModeBtn.textContent = currentUser ? `👤 ${currentUser} — log out` : '👤 Log in';
   adminModeBtn.classList.toggle('active', !!currentUser);
-  clearPastBtn.style.display = adminModeOn ? 'block' : 'none';
+  archivePastBtn.style.display = adminModeOn ? 'block' : 'none';
+  updateDeleteAllArchivedBtnVisibility();
   const addAccountBtn = $('#addAccountBtn');
   if(addAccountBtn) addAccountBtn.style.display = adminModeOn ? 'block' : 'none';
   // Trash's tab only shows while admin mode is on — if it gets locked
@@ -2046,7 +2060,16 @@ addShowSubmitBtn.addEventListener('click', async () => {
 });
 
 
-const clearPastBtn = $('#clearPastBtn');
+const archivePastBtn = $('#archivePastBtn');
+const deleteAllArchivedBtn = $('#deleteAllArchivedBtn');
+// Shown only once there's actually something archived to bulk-delete, the
+// Archive filter is what's currently on screen (so it's acting on what
+// you're looking at, not a hidden pile elsewhere), and you're allowed to
+// delete from this sheet at all — same gate as every other delete path.
+function updateDeleteAllArchivedBtnVisibility(){
+  const hasArchived = allEvents.some(ev => getAnnotation(eventKey(ev)).archived);
+  deleteAllArchivedBtn.style.display = (archiveOnly && hasArchived && canDeleteFromSheet(activeSheet())) ? 'block' : 'none';
+}
 
 // ---------- Delete passcode gate ----------
 // A deliberate 4-digit PIN before any card gets deleted — this is a
@@ -2449,12 +2472,21 @@ newFilterBtn.addEventListener('click', () => {
 archiveFilterBtn.addEventListener('click', () => {
   archiveOnly = !archiveOnly;
   archiveFilterBtn.classList.toggle('active', archiveOnly);
+  updateDeleteAllArchivedBtnVisibility();
   render();
 });
 
-clearPastBtn.addEventListener('click', () => {
-  if(!adminModeOn){ alert('Clearing requires admin mode — unlock it from the "..." menu.'); return; }
-  clearPastEvents();
+archivePastBtn.addEventListener('click', () => {
+  if(!adminModeOn){ alert('You need to be logged in to archive past events.'); return; }
+  archivePastEvents();
+});
+
+deleteAllArchivedBtn.addEventListener('click', () => {
+  if(!canDeleteFromSheet(activeSheet())){
+    alert(activeSheetMode() === 'usopen' ? 'Only Sam can delete from US Open — everyone can still edit it freely.' : 'You can only delete from your own sheet.');
+    return;
+  }
+  deleteAllArchivedEvents();
 });
 
 undoBtn.addEventListener('click', () => { undo(); });
@@ -4004,21 +4036,51 @@ async function permanentlyDeleteFromHistory(key){
 // Bulk-clears events dated before today (midnight boundary) — today's
 // events are kept, anything earlier is removed. Never touches events
 // with no parseable date.
-async function clearPastEvents(){
+// Archives (never deletes) every past-dated event in one go — the bulk
+// counterpart to the per-card 📦 Archive button. Nothing leaves the
+// sheet; archived events just drop out of the normal view (same as
+// always) until you flip on the Archive filter or bring one back.
+async function archivePastEvents(){
   const cutoff = new Date();
   cutoff.setHours(0, 0, 0, 0);
-  const toRemove = allEvents.filter(ev => ev.dateObj && new Date(ev.dateObj) < cutoff);
-  if(!toRemove.length){
-    alert('Nothing to clear — no events are dated before today.');
+  const toArchive = allEvents.filter(ev => ev.dateObj && new Date(ev.dateObj) < cutoff && !getAnnotation(eventKey(ev)).archived);
+  if(!toArchive.length){
+    alert('Nothing to archive — no unarchived events are dated before today.');
     return;
   }
-  if(!confirm(`Remove ${toRemove.length} event${toRemove.length === 1 ? '' : 's'} dated before today? You can undo this with Ctrl+Z or the ↶ button.`)) return;
+  if(!confirm(`Archive ${toArchive.length} event${toArchive.length === 1 ? '' : 's'} dated before today? They'll move into Archive — nothing is deleted, and you can undo with Ctrl+Z.`)) return;
   pushUndo();
-  const removeKeys = new Set(toRemove.map(ev => eventKey(ev)));
-  allEvents = allEvents.filter(ev => !removeKeys.has(eventKey(ev)));
-  removeKeys.forEach(k => delete annotations[k]);
+  toArchive.forEach(ev => { getAnnotation(eventKey(ev)).archived = true; });
   render();
   await pushActiveSheetToRemote();
+}
+
+// Bulk counterpart to per-card delete, scoped to whatever's currently
+// archived on this sheet — the "empty the archive out" step once you've
+// actually decided you're done with what's in there. Same destination as
+// every other delete path: History, never gone for good, searchable and
+// restorable from there same as any other deleted event.
+async function deleteAllArchivedEvents(){
+  const toDelete = allEvents.filter(ev => getAnnotation(eventKey(ev)).archived);
+  if(!toDelete.length){
+    alert('Nothing archived to delete.');
+    return;
+  }
+  if(!confirm(`Permanently delete ${toDelete.length} archived event${toDelete.length === 1 ? '' : 's'}? They'll move to History — still searchable and restorable from there, but off this sheet for good.`)) return;
+  pushUndo();
+  const deletedAt = new Date().toISOString();
+  const deleteKeys = new Set(toDelete.map(ev => eventKey(ev)));
+  const toHistory = toDelete.map(ev => {
+    const ann = getAnnotation(eventKey(ev));
+    return { ...ev, note: ann.note || '', rating: ann.rating || 0, pinned: false, sections: ann.sections || [], isNew: false, archived: false, noteHistory: ann.noteHistory || [], priceHistory: ann.priceHistory || [], extraLinks: ann.extraLinks || [], deletedAt, deletedFromSheet: activeSheetName };
+  });
+  allEvents = allEvents.filter(ev => !deleteKeys.has(eventKey(ev)));
+  deleteKeys.forEach(k => delete annotations[k]);
+  render();
+  await pushActiveSheetToRemote();
+  const hist = ensureHistorySheetExists();
+  const existingHistory = remoteCache.filter(r => r.appSheet === hist.name);
+  await pushSheetEvents(hist.name, 'history', [...existingHistory, ...toHistory]);
 }
 
 let saveNotesTimer = null;
@@ -4695,6 +4757,7 @@ function renderPresale(){
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
   clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
+  updateDeleteAllArchivedBtnVisibility();
   releaseAllPresaleBtn.style.display = hasData ? 'block' : 'none';
 
   if(!hasData){
@@ -5099,6 +5162,7 @@ function renderStandard(){
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
   clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
+  updateDeleteAllArchivedBtnVisibility();
   releaseAllPresaleBtn.style.display = 'none';
 
   if(!hasData){
@@ -6373,6 +6437,7 @@ function renderUsOpen(){
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
   clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
+  updateDeleteAllArchivedBtnVisibility();
   releaseAllPresaleBtn.style.display = 'none';
 
   if(!hasData){
@@ -6444,6 +6509,7 @@ function renderBroadway(){
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
   clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
+  updateDeleteAllArchivedBtnVisibility();
   releaseAllPresaleBtn.style.display = 'none';
 
   if(!hasData){
