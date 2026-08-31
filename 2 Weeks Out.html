@@ -1775,6 +1775,17 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="textPromptModal" style="display:none;">
+  <div class="modal-box">
+    <h3 class="modal-title" id="textPromptModalTitle">Enter a value</h3>
+    <input type="text" autocomplete="off" id="textPromptModalInput" class="modal-text-input" style="margin:14px 0;">
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="textPromptModalCancel">Cancel</button>
+      <button type="button" class="btn primary" id="textPromptModalOk">OK</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="addShowModal" style="display:none;">
   <div class="modal-box insights-modal modal-box-wide">
     <div class="insights-modal-header">
@@ -2039,7 +2050,7 @@ function promptLoginChoice(){
 // (something has to hold the few admin-gated permissions), and every
 // account created after that starts as a regular, non-admin account.
 async function createAccountFlow(isFirstAccount){
-  const name = prompt(isFirstAccount ? "Create the first account on this sheet — what's your name?" : 'Your name:');
+  const name = await promptText(isFirstAccount ? "Create the first account on this sheet — what's your name?" : 'Your name:');
   if(name === null || !name.trim()) return;
   const trimmedName = name.trim();
   if(PEOPLE.some(p => p.name.toLowerCase() === trimmedName.toLowerCase())){
@@ -2389,6 +2400,47 @@ function promptPasscode(title){
     passcodeModalCancel.addEventListener('click', onCancel);
     passcodeModal.addEventListener('click', onOverlay);
     passcodeModalInput.addEventListener('keydown', onKeydown);
+  });
+}
+// A themed stand-in for the browser's native prompt() — that dialog is
+// rendered entirely by the browser chrome itself (not this page), so it
+// looks and behaves differently everywhere: Chrome, Firefox, and Safari
+// each draw it their own way, some mobile browsers style it oddly or
+// suppress it in certain contexts, and it always shows the page's raw
+// URL in its header, which reads as a jarring "browser popup" moment in
+// the middle of an otherwise fully custom-styled app. This is the same
+// Promise-based swap-in as promptPasscode above: resolves with the
+// typed value on OK, or null on Cancel/Escape, same contract prompt()
+// has, so call sites barely change.
+const textPromptModal = $('#textPromptModal');
+const textPromptModalTitle = $('#textPromptModalTitle');
+const textPromptModalInput = $('#textPromptModalInput');
+const textPromptModalOk = $('#textPromptModalOk');
+const textPromptModalCancel = $('#textPromptModalCancel');
+function promptText(title, defaultValue){
+  return new Promise(resolve => {
+    textPromptModalTitle.textContent = title || 'Enter a value';
+    textPromptModalInput.value = defaultValue || '';
+    textPromptModal.style.display = 'flex';
+    setTimeout(() => { textPromptModalInput.focus(); textPromptModalInput.select(); }, 30);
+    function cleanup(){
+      textPromptModal.style.display = 'none';
+      textPromptModalOk.removeEventListener('click', onOk);
+      textPromptModalCancel.removeEventListener('click', onCancel);
+      textPromptModal.removeEventListener('click', onOverlay);
+      textPromptModalInput.removeEventListener('keydown', onKeydown);
+    }
+    function onOk(){ const v = textPromptModalInput.value; cleanup(); resolve(v); }
+    function onCancel(){ cleanup(); resolve(null); }
+    function onOverlay(e){ if(e.target === textPromptModal) onCancel(); }
+    function onKeydown(e){
+      if(e.key === 'Enter') onOk();
+      else if(e.key === 'Escape') onCancel();
+    }
+    textPromptModalOk.addEventListener('click', onOk);
+    textPromptModalCancel.addEventListener('click', onCancel);
+    textPromptModal.addEventListener('click', onOverlay);
+    textPromptModalInput.addEventListener('keydown', onKeydown);
   });
 }
 // Reads whatever's on the Accounts sheet (if it exists yet) — starts
