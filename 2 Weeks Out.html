@@ -178,6 +178,15 @@
     flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
     scrollbar-width:thin;-webkit-overflow-scrolling:touch;
   }
+  /* Sits outside .toolbar's own internal scroll area entirely — it used
+     to be the last button in that scrollable row, which meant it could
+     get pushed out of view (and unclickable without manually scrolling)
+     the moment enough other buttons became visible at once, like right
+     after creating a new account. This is the one button that always
+     needs to be reachable — it's how you know who's logged in and how
+     you log out — so it's a separate flex child of the header now,
+     never inside the part that scrolls or shrinks. */
+  .login-btn-pinned{flex:0 0 auto;}
   .toolbar::-webkit-scrollbar{height:5px;}
   .toolbar::-webkit-scrollbar-thumb{background:var(--hairline);border-radius:3px;}
   .toolbar::-webkit-scrollbar-track{background:transparent;}
@@ -1609,8 +1618,8 @@
       <button class="btn ghost" id="clearBtn" style="display:none;">🗑 Clear data</button>
       <button class="btn ghost" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
       <button class="btn ghost" id="addAccountBtn" style="display:none;" title="Create a new named login for someone else — their own passcode, their own private sheets">➕ Add account</button>
-      <button class="btn ghost" id="adminModeBtn" title="Log in with your passcode. Everyday edits (notes, star, pin, codes, prices) never need this — it's only for admin actions and your own private copies.">👤 Log in</button>
     </div>
+    <button class="btn ghost login-btn-pinned" id="adminModeBtn" title="Log in with your passcode. Everyday edits (notes, star, pin, codes, prices) never need this — it's only for admin actions and your own private copies.">👤 Log in</button>
   </div>
   <div class="sheet-tabs-row">
     <div class="sheet-tabs" id="sheetTabs"></div>
