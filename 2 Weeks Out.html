@@ -90,7 +90,7 @@
     padding:14px 24px;
     border-bottom:1px solid var(--hairline);
   }
-  .header-inner{max-width:1600px;margin:0 auto;display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+  .header-inner{max-width:1600px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
   .title-block{flex:0 0 auto;}
   .eyebrow{
     font-family:'IBM Plex Mono',monospace;
@@ -180,8 +180,19 @@
        min-width (see #confirmArchiveBtn below) so their box size never
        changes as the count changes, which means wrapping here is safe
        even while a drag-select is in progress. */
-    flex-wrap:wrap;row-gap:8px;
+    flex-wrap:wrap;row-gap:8px;gap:4px;
   }
+  /* A tighter, uniform density for every toolbar control — with a
+     dozen-plus buttons plus search plus login all needing to share one
+     row on a real (not just ultra-wide) desktop window, the roomier
+     sizing used elsewhere in the app left no realistic width budget to
+     fit them all without wrapping. Scoped to .toolbar specifically, so
+     controls elsewhere (modals, cards) keep their normal, easier-to-tap
+     sizing. */
+  .toolbar .btn, .toolbar .filter-btn{padding:6px 8px;font-size:11.5px;gap:4px;}
+  .toolbar .sort-select{padding:6px 22px 6px 7px;font-size:11px;}
+  .toolbar .col-btn{width:22px;}
+  .toolbar .col-count{padding:0 5px;}
   /* Locks the box size regardless of the digit(s) inside the
      parentheses — see the .toolbar comment above for why this matters
      beyond just visual tidiness. */
@@ -194,7 +205,7 @@
      needs to be reachable — it's how you know who's logged in and how
      you log out — so it's a separate flex child of the header now,
      never inside the part that scrolls or shrinks. */
-  .login-btn-pinned{flex:0 0 auto;}
+  .login-btn-pinned{flex:0 0 auto;padding:6px 8px;font-size:11.5px;}
   /* Every button keeps its natural size — only the search box is
      allowed to shrink (down to its own min-width), same division of
      space as before. */
@@ -213,7 +224,7 @@
   /* max-width keeps the search box from growing so wide it eats the
      room the rest of the buttons need to share a row — it still grows
      to fill genuinely leftover space, just not without limit. */
-  .search-wrap{position:relative;flex:1 1 200px;min-width:160px;max-width:340px;}
+  .search-wrap{position:relative;flex:1 1 130px;min-width:110px;max-width:170px;}
   .search-wrap input{
     width:100%;
     background:var(--card);
@@ -235,7 +246,9 @@
      browser tries to apply, using a long transition-delay trick so it
      never even flashes white first. See also autocomplete/name/data-*
      attributes on the input itself, which try to stop the autofill from
-     triggering in the first place. */
+     triggering in the first place, and the autofillClearInterval below,
+     which actually detects and clears an autofilled value rather than
+     just hiding what it looks like. */
   .search-wrap input:-webkit-autofill,
   .search-wrap input:-webkit-autofill:hover,
   .search-wrap input:-webkit-autofill:focus,
@@ -245,7 +258,15 @@
     box-shadow:0 0 0 1000px var(--card) inset;
     caret-color:var(--text);
     transition:background-color 5000s ease-in-out 0s;
+    /* Naming an animation here (that does nothing visually) is a well-
+       known trick for detecting :-webkit-autofill from JS — the browser
+       fires an 'animationstart' event the instant this pseudo-class
+       starts matching, which is the earliest reliable signal that
+       something just got autofilled in, letting the listener below
+       clear it immediately instead of only at page load. */
+    animation-name:autofillDetected;
   }
+  @keyframes autofillDetected{ from{} to{} }
   .search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);opacity:.5;pointer-events:none;}
   .search-clear-btn{
     position:absolute;right:6px;top:50%;transform:translateY(-50%);
@@ -1627,7 +1648,7 @@
         <option value="venue">By venue</option>
         <option value="name" selected>By name</option>
       </select>
-      <button class="filter-btn" id="expandCollapseBtn" type="button" title="Toggle every section open or closed">⌃ Collapse all</button>
+      <button class="filter-btn" id="expandCollapseBtn" type="button" title="Toggle every section open or closed">⌃ Collapse</button>
       <div class="col-stepper" id="colStepper" title="Columns">
         <button class="col-btn" id="colMinus" type="button" aria-label="Fewer columns">−</button>
         <span class="col-count" id="colCount">8</span>
@@ -1645,12 +1666,12 @@
       <button class="btn ghost" id="addShowBtn" title="Add a single show by hand — paste a Ticketmaster link and it'll try to pull the date and name out of it for you">+ Add show</button>
       <button class="btn primary" id="uploadBtn" title="Adds to THIS sheet — merges in, refreshes matches, skips duplicates. Use + above instead to start a separate new sheet.">Add CSV</button>
       <input type="file" id="fileInput" accept=".csv">
-      <button class="btn ghost" id="markSeenBtn" title="Clear the NEW badge from every event on this sheet">✓ Mark all seen</button>
+      <button class="btn ghost" id="markSeenBtn" title="Clear the NEW badge from every event on this sheet">✓ Mark seen</button>
       <button class="btn ghost" id="archivePastBtn" title="Archive every event dated before today — moves them out of the main view into Archive, nothing is deleted" style="display:none;">📦 Archive past</button>
       <button class="btn danger" id="deleteAllArchivedBtn" title="Permanently remove every archived event on this sheet — sent to History first, so it's still searchable and can be brought back from there" style="display:none;">🗑 Delete archived</button>
       <button class="btn ghost" id="clearBtn" style="display:none;">🗑 Clear data</button>
       <button class="btn ghost" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
-      <button class="btn ghost" id="addAccountBtn" style="display:none;" title="Create a new named login for someone else — their own passcode, their own private sheets">➕ Add account</button>
+      <button class="btn ghost" id="addAccountBtn" style="display:none;" title="Create a new named login for someone else — their own passcode, their own private sheets">➕ Add login</button>
     </div>
     <button class="btn ghost login-btn-pinned" id="adminModeBtn" title="Log in with your passcode. Everyday edits (notes, star, pin, codes, prices) never need this — it's only for admin actions and your own private copies.">👤 Log in</button>
   </div>
@@ -1782,6 +1803,19 @@ const emptyState = $('#emptyState');
 const listRoot = $('#listRoot');
 const searchInput = $('#searchInput');
 const searchClearBtn = $('#searchClearBtn');
+// See the autofillDetected keyframe in the CSS — it fires the instant a
+// password manager or the browser autofills this field, which is a lot
+// more reliable than only clearing once at page load (autofill often
+// happens asynchronously, after initApp() has already run and cleared
+// whatever was there at that point). Dispatching a real 'input' event
+// after clearing means this goes through the exact same path as the
+// person clearing the box themselves — search state stays consistent
+// either way.
+searchInput.addEventListener('animationstart', e => {
+  if(e.animationName !== 'autofillDetected' || !searchInput.value) return;
+  searchInput.value = '';
+  searchInput.dispatchEvent(new Event('input', { bubbles:true }));
+});
 const countLabel = $('#countLabel');
 const metaLine = $('#metaLine');
 const sheetTabs = $('#sheetTabs');
@@ -2513,13 +2547,13 @@ expandCollapseBtn.addEventListener('click', () => {
 });
 function updateExpandCollapseBtnLabel(){
   if(expandCycleState === 0){
-    expandCollapseBtn.textContent = '🏷 Show names';
+    expandCollapseBtn.textContent = '🏷 Names';
     expandCollapseBtn.title = 'Expand headings enough to show names (artists, etc), keeping cards tucked away';
   } else if(expandCycleState === 1){
-    expandCollapseBtn.textContent = '⌄ Expand all';
+    expandCollapseBtn.textContent = '⌄ Expand';
     expandCollapseBtn.title = 'Expand everything, including every card';
   } else {
-    expandCollapseBtn.textContent = '⌃ Collapse all';
+    expandCollapseBtn.textContent = '⌃ Collapse';
     expandCollapseBtn.title = 'Collapse every section for easier scrolling';
   }
 }
