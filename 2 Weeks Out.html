@@ -1303,6 +1303,21 @@
     cursor:pointer;transition:border-color .15s ease,background .15s ease;
   }
   .history-search-delete-btn:hover{border-color:var(--coral);background:rgba(255,107,106,.1);}
+  /* Native <details>/<summary> — collapsed by default (no "open"
+     attribute in the HTML), which is the whole point: archived results
+     stay out of the way until you actually want to look at them. */
+  .archived-search-details{margin-top:24px;}
+  .archived-search-summary{
+    cursor:pointer;list-style:none;user-select:none;
+    display:flex;align-items:center;gap:6px;
+  }
+  .archived-search-summary::-webkit-details-marker{display:none;}
+  .archived-search-summary::before{
+    content:'▸';display:inline-block;color:var(--muted);
+    transition:transform .15s ease;font-size:11px;
+  }
+  .archived-search-details[open] .archived-search-summary::before{transform:rotate(90deg);}
+  .archived-search-summary:hover{color:var(--text);}
   .insights-shows-list{
     display:flex;flex-direction:column;gap:4px;margin-bottom:4px;
     max-height:140px;overflow-y:auto;
@@ -1944,12 +1959,15 @@ function sheetVisibleToCurrentUser(sheet){
 // Priya" isn't shared with anyone), and presale specifically changes
 // every day, so waiting on an admin just to start it over each day
 // would be exactly the wrong kind of friction. The owner of a private
-// sheet can clear their own freely; US Open or an ownerless sheet only
-// an admin account can.
+// sheet can clear their own freely. US Open is the one sheet nobody can
+// clear at all, not even an admin — it's shared by everyone, so wiping
+// it is exactly the kind of one-click, hard-to-notice mistake that
+// shouldn't be possible; Archive past / Delete archived cover the same
+// "get old stuff out of the way" need without a full-sheet wipe.
 function canClearActiveSheet(){
   const sheet = activeSheet();
   if(!sheet || !currentUser) return false;
-  if(sheet.mode === 'usopen') return currentUserIsAdmin();
+  if(sheet.mode === 'usopen') return false;
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
   return currentUserIsAdmin();
@@ -5118,14 +5136,28 @@ function renderSearchResults(query){
     // display glitch.
     if(ev.__mode === 'trash' || ev.__mode === 'history' || ev.__mode === 'accounts' || ev.__mode === 'tournotes') return false;
     if(!matchesSearch(ev, query, searchAnnotationsMap.get(eventKey(ev)).ann)) return false;
-    // Archived events should stay out of search results by default, same
-    // as every other view in the app — otherwise a search brings back
-    // things you deliberately put away. If Archive mode is toggled on,
-    // flip that around and search within just the archive instead, for
-    // the same reason every other render function does.
+    // Archived events get their own collapsible section at the bottom
+    // (see archivedSearchSectionHtml) instead of being mixed into the
+    // main results or hidden entirely — a search should still be able
+    // to find something you archived, just not have it clutter the main
+    // list of what's actually active right now.
     const ann = searchAnnotationsMap.get(eventKey(ev)).ann;
-    if(archiveOnly) return !!ann.archived;
     return !ann.archived;
+  });
+
+  // Same query, same sheets, but archived-only — surfaced separately
+  // (and collapsed by default) rather than folded into `matched` or
+  // hidden outright, so a search still finds something you put away
+  // without it crowding out what's actually active. Same private-sheet
+  // scoping as historicalMatched below: never leak another person's
+  // archived events into someone else's search results.
+  const archivedMatched = events.filter(ev => {
+    if(ev.__mode === 'trash' || ev.__mode === 'history' || ev.__mode === 'accounts' || ev.__mode === 'tournotes') return false;
+    const ann = searchAnnotationsMap.get(eventKey(ev)).ann;
+    if(!ann.archived) return false;
+    const privateMatch = (ev.__sheet || '').match(/^(.+) — (.+)$/);
+    if(privateMatch && currentUser !== privateMatch[2]) return false;
+    return matchesSearch(ev, query, ann);
   });
 
   // A history sheet's snapshot inherits whatever note/sections/pinned
@@ -5146,7 +5178,7 @@ function renderSearchResults(query){
 
   countLabel.textContent = `${matched.length} match${matched.length === 1 ? '' : 'es'} across all sheets`;
 
-  if(!matched.length && !historicalMatched.length){
+  if(!matched.length && !historicalMatched.length && !archivedMatched.length){
     listRoot.innerHTML = searchNoResultsHtml(query, events);
     return;
   }
@@ -5179,11 +5211,18 @@ function renderSearchResults(query){
         return liveEv.__mode === 'presale' ? cardHtmlPresale(liveEv) : cardHtmlStandard(liveEv);
       }).join('')}</div>`;
     });
-  } else {
+  } else if(!archivedMatched.length){
     html += `<p class="insights-empty" style="padding:16px 20px;">No active matches for "${escapeHtml(query)}" — but see below.</p>`;
   }
   if(historicalMatched.length){
     html += historySearchSectionHtml(historicalMatched);
+  }
+  // Archived last, all the way at the bottom, below History — the two
+  // "put away" categories sit together, with the still-live, still-
+  // editable one (Archived) below the truly-gone one (History) since
+  // that's the one you're more likely to actually want back.
+  if(archivedMatched.length){
+    html += archivedSearchSectionHtml(archivedMatched);
   }
   listRoot.innerHTML = html;
 }
@@ -5235,6 +5274,45 @@ function historySearchSectionHtml(historicalMatched){
   return `
     <p class="notes-label" style="margin:24px 20px 8px;">📜 Passed shows (${historicalMatched.length})</p>
     <div class="history-search-list">${rows}</div>`;
+}
+// The bottom-of-search "Archived" section — collapsed by default (it's
+// a native <details>, so no extra JS needed to toggle it) since these
+// are exactly the events someone deliberately archived to get them out
+// of the way; a search should still be able to find one, but shouldn't
+// dump the whole pile back in front of you unasked. Unlike History,
+// these are still live, still-editable events (archiving never deletes
+// anything) — "↺ Unarchive" just flips the same archived flag every
+// other Archive control does, and "🗑 Delete" is the one destructive
+// action here, so it's the one that gets a confirm() warning first.
+function archivedSearchSectionHtml(archivedMatched){
+  const sorted = [...archivedMatched].sort((a, b) => new Date(b.dateObj || 0) - new Date(a.dateObj || 0));
+  const rows = sorted.map(ev => {
+    const key = eventKey(ev);
+    const ann = searchAnnotationsMap.get(key).ann;
+    const sheetObj = sheets.find(s => s.name === ev.__sheet);
+    const dateStr = ev.dateObj ? new Date(ev.dateObj).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    const sections = (ann.sections || []).filter(s => (s.label && s.label.trim()) || (s.price && s.price.trim()));
+    const codes = (ev.code || '').split(',').map(c => c.trim()).filter(Boolean);
+    return `<div class="history-search-row">
+      <div class="history-search-main">
+        <span class="history-search-name">${escapeHtml(ev.name || '')}</span>
+        ${dateStr ? `<span class="history-search-date">${escapeHtml(dateStr)}</span>` : ''}
+      </div>
+      <div class="history-search-venue">${escapeHtml(ev.venue || '')}${ev.__sheet ? ` · ${escapeHtml(ev.__sheet)}` : ''}</div>
+      ${codes.length ? `<div class="history-search-codes">${codes.map(c => `<span class="history-search-code-chip">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
+      ${ann.note && ann.note.trim() ? `<div class="history-search-note">📝 ${escapeHtml(ann.note.trim())}</div>` : ''}
+      ${sections.length ? `<div class="history-search-sections">${sections.map(s => `<span class="history-section-chip">${escapeHtml(s.label || '')} ${escapeHtml(s.price ? '$' + s.price : '')}</span>`).join('')}</div>` : ''}
+      <div class="history-search-restore-row">
+        <button type="button" class="history-search-restore-btn" data-action="archive" data-key="${escapeHtml(key)}" title="Move this back into the normal view">↺ Unarchive</button>
+        ${canDeleteFromSheet(sheetObj) ? `<button type="button" class="history-search-delete-btn" data-action="delete-archived-search" data-key="${escapeHtml(key)}" title="Delete this — it moves to History first, so it's not gone for good">🗑 Delete</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  return `
+    <details class="archived-search-details">
+      <summary class="notes-label archived-search-summary">📦 Archived (${archivedMatched.length})</summary>
+      <div class="history-search-list">${rows}</div>
+    </details>`;
 }
 
 // A-Z jump strip shown above the list when headings are alphabetically
@@ -6864,7 +6942,10 @@ fileInput.addEventListener('change', e => {
 });
 
 clearBtn.addEventListener('click', () => {
-  if(!canClearActiveSheet()){ alert('Clearing this sheet requires being logged in as its owner, or as admin.'); return; }
+  if(!canClearActiveSheet()){
+    alert(activeSheetMode() === 'usopen' ? "US Open can't be fully cleared — archive what you don't want to see instead (Archive past, or Select and Archive)." : 'Clearing this sheet requires being logged in as its owner, or as admin.');
+    return;
+  }
   clearActiveSheetEvents();
 });
 
@@ -7185,6 +7266,21 @@ listRoot.addEventListener('click', async e => {
   const deleteHistForeverBtn = e.target.closest('[data-action="delete-history-forever"]');
   if(deleteHistForeverBtn){
     permanentlyDeleteFromHistory(deleteHistForeverBtn.dataset.key);
+    return;
+  }
+
+  // Delete from the Archived-in-search list — the one destructive
+  // action in that section, so unlike the plain per-card delete above,
+  // this gets a warning first. Still goes through the exact same
+  // deleteSingleEvent path (History first, same permission checks).
+  const deleteArchivedSearchBtn = e.target.closest('[data-action="delete-archived-search"]');
+  if(deleteArchivedSearchBtn){
+    const key = deleteArchivedSearchBtn.dataset.key;
+    const entry = searchAnnotationsMap && searchAnnotationsMap.get(key);
+    const label = entry ? (entry.ev.name || 'this event') : 'this event';
+    if(confirm(`Delete "${label}"? It'll move to History — still searchable and restorable from there, but off its sheet for good.`)){
+      deleteSingleEvent(key);
+    }
     return;
   }
 
