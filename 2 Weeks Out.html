@@ -218,6 +218,26 @@
     outline:none;
   }
   .search-wrap input:focus{border-color:var(--amber);}
+  /* Browsers (and password-manager extensions like LastPass/1Password)
+     sometimes treat this as a fillable field and autofill a remembered
+     value into it, painting it with the browser's native white/yellow
+     autofill background — which also makes the search icon go invisible
+     since it's light-on-light at that point. This override forces our
+     own dark background back on top of whatever autofill styling the
+     browser tries to apply, using a long transition-delay trick so it
+     never even flashes white first. See also autocomplete/name/data-*
+     attributes on the input itself, which try to stop the autofill from
+     triggering in the first place. */
+  .search-wrap input:-webkit-autofill,
+  .search-wrap input:-webkit-autofill:hover,
+  .search-wrap input:-webkit-autofill:focus,
+  .search-wrap input:-webkit-autofill:active{
+    -webkit-text-fill-color:var(--text);
+    -webkit-box-shadow:0 0 0 1000px var(--card) inset;
+    box-shadow:0 0 0 1000px var(--card) inset;
+    caret-color:var(--text);
+    transition:background-color 5000s ease-in-out 0s;
+  }
   .search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);opacity:.5;pointer-events:none;}
   .search-clear-btn{
     position:absolute;right:6px;top:50%;transform:translateY(-50%);
@@ -1586,7 +1606,7 @@
     <div class="toolbar">
       <div class="search-wrap">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="searchInput" autocomplete="off" placeholder="Search name, venue, link, notes…" title="Searches artist/event name, venue, Ticketmaster/VividSeats/StubHub links, notes, and price section labels. Multiple words all have to match, in any field.">
+        <input type="text" id="searchInput" name="ticketwatch-search-nofill" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" placeholder="Search name, venue, link, notes…" title="Searches artist/event name, venue, Ticketmaster/VividSeats/StubHub links, notes, and price section labels. Multiple words all have to match, in any field.">
         <button type="button" id="searchClearBtn" class="search-clear-btn" title="Clear search" style="display:none;">×</button>
       </div>
       <select class="sort-select" id="sortSelect" title="Sort">
