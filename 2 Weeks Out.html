@@ -1723,6 +1723,7 @@
       <button class="btn primary" id="uploadBtn" title="Adds to THIS sheet — merges in, refreshes matches, skips duplicates. Use + above instead to start a separate new sheet.">Add CSV</button>
       <input type="file" id="fileInput" accept=".csv">
       <button class="btn ghost" id="markSeenBtn" title="Clear the NEW badge from every event on this sheet">✓ Mark seen</button>
+      <button class="btn ghost" id="archivePastBtn" title="Archive every event dated before today — moves them out of the main view into Archive, nothing is deleted" style="display:none;">📦 Archive past</button>
       <button class="btn danger" id="deleteAllArchivedBtn" title="Permanently remove every archived event on this sheet — sent to History first, so it's still searchable and can be brought back from there" style="display:none;">🗑 Delete archived</button>
       <button class="btn ghost" id="clearBtn" style="display:none;">🗑 Clear data</button>
       <button class="btn ghost" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
@@ -1730,7 +1731,7 @@
     <div class="account-menu-wrap login-btn-pinned">
       <button class="btn ghost account-menu-trigger" id="adminModeBtn" title="Log in — pick your name and enter your passcode, or create a new account. Everyday edits (notes, star, pin, codes, prices) never require logging in; it's only for your own private sheets and a few admin-only actions.">👤 Log in</button>
       <div class="account-menu" id="accountMenu" style="display:none;">
-        <button type="button" class="account-menu-item" id="accountMenuArchivePast">📦 Archive past</button>
+        <button type="button" class="account-menu-item" id="accountMenuArchived">📦 Archived</button>
         <button type="button" class="account-menu-item account-menu-logout" id="accountMenuLogout">🚪 Log out</button>
       </div>
     </div>
@@ -1949,7 +1950,7 @@ const insightsBody = $('#insightsBody');
 const closeInsightsBtn = $('#closeInsightsBtn');
 const adminModeBtn = $('#adminModeBtn');
 const accountMenu = $('#accountMenu');
-const accountMenuArchivePast = $('#accountMenuArchivePast');
+const accountMenuArchived = $('#accountMenuArchived');
 const accountMenuLogout = $('#accountMenuLogout');
 function updateAdminModeUI(){
   // No "— log out" in the button text anymore — clicking it while
@@ -1957,6 +1958,7 @@ function updateAdminModeUI(){
   // the label shouldn't promise an action a single click no longer does.
   adminModeBtn.textContent = currentUser ? `👤 ${currentUser}` : '👤 Log in';
   adminModeBtn.classList.toggle('active', !!currentUser);
+  archivePastBtn.style.display = adminModeOn ? 'block' : 'none';
   updateDeleteAllArchivedBtnVisibility();
   // Trash's tab only shows while admin mode is on — if it gets locked
   // while Trash happens to be the active sheet, staying there would
@@ -2068,9 +2070,17 @@ accountMenuLogout.addEventListener('click', () => {
   renderTabs();
   render();
 });
-accountMenuArchivePast.addEventListener('click', () => {
+accountMenuArchived.addEventListener('click', () => {
   accountMenu.style.display = 'none';
-  archivePastEvents();
+  // Same toggle as the toolbar's own 📦 Archive button — this is just a
+  // second, convenient way to reach it for whoever's already got the
+  // account menu open, not a different action. Kept in sync with that
+  // button's active state so neither one goes stale relative to the
+  // other.
+  archiveOnly = !archiveOnly;
+  archiveFilterBtn.classList.toggle('active', archiveOnly);
+  updateDeleteAllArchivedBtnVisibility();
+  render();
 });
 // Click-outside and Escape both close the menu — standard popover
 // behavior, and without it the only way to dismiss it would be to
@@ -2256,6 +2266,7 @@ addShowSubmitBtn.addEventListener('click', async () => {
 
 
 const deleteAllArchivedBtn = $('#deleteAllArchivedBtn');
+const archivePastBtn = $('#archivePastBtn');
 // Shown only once there's actually something archived to bulk-delete, the
 // Archive filter is what's currently on screen (so it's acting on what
 // you're looking at, not a hidden pile elsewhere), and you're allowed to
@@ -2798,6 +2809,11 @@ archiveFilterBtn.addEventListener('click', () => {
   archiveFilterBtn.classList.toggle('active', archiveOnly);
   updateDeleteAllArchivedBtnVisibility();
   render();
+});
+
+archivePastBtn.addEventListener('click', () => {
+  if(!adminModeOn){ alert('You need to be logged in to archive past events.'); return; }
+  archivePastEvents();
 });
 
 deleteAllArchivedBtn.addEventListener('click', () => {
