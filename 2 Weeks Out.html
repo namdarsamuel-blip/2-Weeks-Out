@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ticket Watch</title>
+<title>Ticket Library</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpolygon points='12,2 22,21 2,21' fill='%23e34848'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -205,7 +205,32 @@
      needs to be reachable — it's how you know who's logged in and how
      you log out — so it's a separate flex child of the header now,
      never inside the part that scrolls or shrinks. */
-  .login-btn-pinned{flex:0 0 auto;padding:6px 8px;font-size:11.5px;}
+  .login-btn-pinned{flex:0 0 auto;position:relative;}
+  .account-menu-trigger{padding:6px 8px;font-size:11.5px;}
+  /* The account button used to log you out on a single click, which is
+     exactly the kind of destructive-by-accident click this app has
+     been trying to design out of everywhere else (see Clear
+     data/Archive/Delete's confirms and warnings elsewhere) — logging
+     out isn't reversible in the sense that you need your passcode again
+     to get back in, so it shouldn't be one careless click away either.
+     Now the button opens this small menu instead; Log out is a
+     deliberate second click inside it, and Archive past lives here too
+     since it's another admin-only, infrequent action that doesn't need
+     a permanent slot in the main toolbar. */
+  .account-menu{
+    position:absolute;top:calc(100% + 6px);right:0;z-index:40;
+    background:var(--card);border:1px solid var(--hairline);border-radius:10px;
+    padding:6px;display:flex;flex-direction:column;gap:2px;
+    min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,.4);
+  }
+  .account-menu-item{
+    font-family:'Inter',sans-serif;font-size:13px;font-weight:600;text-align:left;
+    padding:9px 10px;border-radius:6px;border:none;background:transparent;color:var(--text);
+    cursor:pointer;transition:background .15s ease;
+  }
+  .account-menu-item:hover{background:var(--card-hover);}
+  .account-menu-logout{color:var(--coral);}
+  .account-menu-logout:hover{background:rgba(255,107,106,.1);}
   /* Every button keeps its natural size — only the search box is
      allowed to shrink (down to its own min-width), same division of
      space as before. */
@@ -1664,8 +1689,8 @@
 <header id="siteHeader">
   <div class="header-inner">
     <div class="title-block">
-      <p class="eyebrow" id="eyebrowLabel">Ticket Watch</p>
-      <h1>Ticket Watch <span class="count" id="countLabel"></span></h1>
+      <p class="eyebrow" id="eyebrowLabel">Ticket Library</p>
+      <h1>Ticket Library <span class="count" id="countLabel"></span></h1>
     </div>
     <div class="toolbar">
       <div class="search-wrap">
@@ -1698,12 +1723,17 @@
       <button class="btn primary" id="uploadBtn" title="Adds to THIS sheet — merges in, refreshes matches, skips duplicates. Use + above instead to start a separate new sheet.">Add CSV</button>
       <input type="file" id="fileInput" accept=".csv">
       <button class="btn ghost" id="markSeenBtn" title="Clear the NEW badge from every event on this sheet">✓ Mark seen</button>
-      <button class="btn ghost" id="archivePastBtn" title="Archive every event dated before today — moves them out of the main view into Archive, nothing is deleted" style="display:none;">📦 Archive past</button>
       <button class="btn danger" id="deleteAllArchivedBtn" title="Permanently remove every archived event on this sheet — sent to History first, so it's still searchable and can be brought back from there" style="display:none;">🗑 Delete archived</button>
       <button class="btn ghost" id="clearBtn" style="display:none;">🗑 Clear data</button>
       <button class="btn ghost" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
     </div>
-    <button class="btn ghost login-btn-pinned" id="adminModeBtn" title="Log in — pick your name and enter your passcode, or create a new account. Everyday edits (notes, star, pin, codes, prices) never require logging in; it's only for your own private sheets and a few admin-only actions.">👤 Log in</button>
+    <div class="account-menu-wrap login-btn-pinned">
+      <button class="btn ghost account-menu-trigger" id="adminModeBtn" title="Log in — pick your name and enter your passcode, or create a new account. Everyday edits (notes, star, pin, codes, prices) never require logging in; it's only for your own private sheets and a few admin-only actions.">👤 Log in</button>
+      <div class="account-menu" id="accountMenu" style="display:none;">
+        <button type="button" class="account-menu-item" id="accountMenuArchivePast">📦 Archive past</button>
+        <button type="button" class="account-menu-item account-menu-logout" id="accountMenuLogout">🚪 Log out</button>
+      </div>
+    </div>
   </div>
   <div class="sheet-tabs-row">
     <div class="sheet-tabs" id="sheetTabs"></div>
@@ -1761,8 +1791,8 @@
 <div class="modal-overlay" id="deletePasscodeModal" style="display:none;">
   <div class="modal-box">
     <h3 class="modal-title">Confirm Delete</h3>
-    <p class="notes-label" id="deletePasscodeLabel">Enter the 4-digit passcode to delete</p>
-    <input type="text" id="deletePasscodeInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore name="tw-delete-code-not-a-password">
+    <p class="notes-label" id="deletePasscodeLabel">Enter your passcode to delete</p>
+    <input type="text" id="deletePasscodeInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore name="tw-delete-code-not-a-password" placeholder="••••">
     <p class="passcode-error" id="deletePasscodeError" style="display:none;">Incorrect passcode.</p>
     <div class="modal-actions">
       <button class="btn ghost" id="cancelDeletePasscodeBtn" type="button">Cancel</button>
@@ -1918,10 +1948,15 @@ const insightsTitle = $('#insightsTitle');
 const insightsBody = $('#insightsBody');
 const closeInsightsBtn = $('#closeInsightsBtn');
 const adminModeBtn = $('#adminModeBtn');
+const accountMenu = $('#accountMenu');
+const accountMenuArchivePast = $('#accountMenuArchivePast');
+const accountMenuLogout = $('#accountMenuLogout');
 function updateAdminModeUI(){
-  adminModeBtn.textContent = currentUser ? `👤 ${currentUser} — log out` : '👤 Log in';
+  // No "— log out" in the button text anymore — clicking it while
+  // logged in opens the menu below rather than logging out directly, so
+  // the label shouldn't promise an action a single click no longer does.
+  adminModeBtn.textContent = currentUser ? `👤 ${currentUser}` : '👤 Log in';
   adminModeBtn.classList.toggle('active', !!currentUser);
-  archivePastBtn.style.display = adminModeOn ? 'block' : 'none';
   updateDeleteAllArchivedBtnVisibility();
   // Trash's tab only shows while admin mode is on — if it gets locked
   // while Trash happens to be the active sheet, staying there would
@@ -1977,12 +2012,12 @@ function canClearActiveSheet(){
 }
 adminModeBtn.addEventListener('click', async () => {
   if(currentUser){
-    currentUser = null;
-    adminModeOn = false;
-    localStorage.removeItem('ticketWatchLoggedInAs');
-    updateAdminModeUI();
-    renderTabs();
-    render();
+    // Logged in — open the small menu (Archive past / Log out) instead
+    // of logging out on this click directly. Logging out isn't
+    // reversible in the sense that it takes your passcode again to get
+    // back in, so — same reasoning as every other genuinely destructive
+    // action in this app — it shouldn't be one accidental click away.
+    accountMenu.style.display = accountMenu.style.display === 'flex' ? 'none' : 'flex';
     return;
   }
   // Nobody's ever created an account on this sheet yet — skip straight
@@ -2023,6 +2058,31 @@ adminModeBtn.addEventListener('click', async () => {
   updateAdminModeUI();
   renderTabs();
   render();
+});
+accountMenuLogout.addEventListener('click', () => {
+  accountMenu.style.display = 'none';
+  currentUser = null;
+  adminModeOn = false;
+  localStorage.removeItem('ticketWatchLoggedInAs');
+  updateAdminModeUI();
+  renderTabs();
+  render();
+});
+accountMenuArchivePast.addEventListener('click', () => {
+  accountMenu.style.display = 'none';
+  archivePastEvents();
+});
+// Click-outside and Escape both close the menu — standard popover
+// behavior, and without it the only way to dismiss it would be to
+// actually pick one of the two options.
+document.addEventListener('click', e => {
+  if(accountMenu.style.display !== 'flex') return;
+  if(e.target === adminModeBtn || adminModeBtn.contains(e.target)) return;
+  if(accountMenu.contains(e.target)) return;
+  accountMenu.style.display = 'none';
+});
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && accountMenu.style.display === 'flex') accountMenu.style.display = 'none';
 });
 // Sentinel returned by promptLoginChoice() when "Create new account" is
 // picked instead of an existing name — distinct from any real name and
@@ -2191,7 +2251,6 @@ addShowSubmitBtn.addEventListener('click', async () => {
 });
 
 
-const archivePastBtn = $('#archivePastBtn');
 const deleteAllArchivedBtn = $('#deleteAllArchivedBtn');
 // Shown only once there's actually something archived to bulk-delete, the
 // Archive filter is what's currently on screen (so it's acting on what
@@ -2202,22 +2261,27 @@ function updateDeleteAllArchivedBtnVisibility(){
   deleteAllArchivedBtn.style.display = (archiveOnly && hasArchived && canDeleteFromSheet(activeSheet())) ? 'block' : 'none';
 }
 
-// ---------- Delete passcode gate ----------
-// A deliberate 4-digit PIN before any card gets deleted — this is a
-// lightweight deterrent for a shared link, not real security (anyone
-// could read it from the page source), but that matches the actual goal:
-// stop a casual visitor from deleting things by mistake or on a whim.
-// Notes are excluded on purpose — those change constantly and should
-// stay frictionless.
-const DELETE_PASSCODE = '2121';
+// ---------- Delete-sheet passcode re-check ----------
+// Deleting a whole sheet is the single most destructive action in this
+// app — unlike every per-event delete, it doesn't go to History first;
+// the sheet and everything on it is just gone. Re-entering your own
+// passcode here is a deliberate speed bump against a stray click doing
+// that by accident, checked against the actual currently-logged-in
+// account's own passcode (never a fixed value baked into the code) so
+// it stays meaningful as accounts get added or changed.
 let deletePasscodeResolve = null;
-
+// Masked the same way the login passcode field is (see maskInputAsDots
+// and its comment further down) — plain type="text" with the real
+// value tracked separately in JS, not type="password", so this can't
+// end up triggering Chrome's own password-manager save prompt the way
+// the old login field once did.
+const deletePasscodeMask = maskInputAsDots(deletePasscodeInput);
 function requestDeletePasscode(message){
   return new Promise(resolve => {
     deletePasscodeResolve = resolve;
-    deletePasscodeInput.value = '';
+    deletePasscodeMask.reset();
     deletePasscodeError.style.display = 'none';
-    deletePasscodeLabel.textContent = message || 'Enter the 4-digit passcode to delete';
+    deletePasscodeLabel.textContent = message || 'Enter your passcode to delete';
     deletePasscodeModal.style.display = 'flex';
     deletePasscodeInput.focus();
   });
@@ -2227,11 +2291,12 @@ function closeDeletePasscodeModal(result){
   if(deletePasscodeResolve){ deletePasscodeResolve(result); deletePasscodeResolve = null; }
 }
 function submitDeletePasscode(){
-  if(deletePasscodeInput.value === DELETE_PASSCODE){
+  const person = PEOPLE.find(p => p.name === currentUser);
+  if(person && deletePasscodeMask.getValue() === person.passcode){
     closeDeletePasscodeModal(true);
   } else {
     deletePasscodeError.style.display = 'block';
-    deletePasscodeInput.value = '';
+    deletePasscodeMask.reset();
     deletePasscodeInput.focus();
   }
 }
@@ -2729,11 +2794,6 @@ archiveFilterBtn.addEventListener('click', () => {
   archiveFilterBtn.classList.toggle('active', archiveOnly);
   updateDeleteAllArchivedBtnVisibility();
   render();
-});
-
-archivePastBtn.addEventListener('click', () => {
-  if(!adminModeOn){ alert('You need to be logged in to archive past events.'); return; }
-  archivePastEvents();
 });
 
 deleteAllArchivedBtn.addEventListener('click', () => {
@@ -4609,7 +4669,7 @@ async function renameSheet(oldName){
 }
 
 async function deleteSheet(name){
-  if(!adminModeOn){ alert('Deleting a sheet requires admin mode — unlock it from the "..." menu.'); return; }
+  if(!adminModeOn){ alert('Deleting a sheet requires being logged in.'); return; }
   if(sheets.length <= 1){
     alert("You need at least one sheet — try renaming it or clearing its data instead.");
     return;
@@ -4620,6 +4680,13 @@ async function deleteSheet(name){
     return;
   }
   if(!confirm(`Delete "${name}"? This can't be undone.`)) return;
+  // Deleting a whole sheet doesn't go to History the way a single event
+  // does — it's genuinely, permanently gone the moment this runs — so
+  // on top of the confirm() above, it asks you to actually re-enter
+  // your own passcode, the same speed bump every other truly
+  // irreversible action in this app uses.
+  const confirmed = await requestDeletePasscode(`Enter your passcode to permanently delete "${name}"`);
+  if(!confirmed) return;
   sheets = sheets.filter(s => s.name !== name);
   pendingEmptySheets = pendingEmptySheets.filter(p => p.name !== name);
   remoteCache = remoteCache.filter(ev => ev.appSheet !== name);
