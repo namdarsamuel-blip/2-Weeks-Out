@@ -7779,14 +7779,38 @@ listRoot.addEventListener('focusout', e => {
   setTimeout(render, 0);
 });
 
+// Only ever intervene when the drag is actually carrying a file — a
+// dragged link (from the address bar, a bookmark, another tab, etc.)
+// shows up in dataTransfer with types like "text/uri-list"/"text/plain"
+// but never "Files". Earlier this called preventDefault() unconditionally
+// on every drag over the page, which blocked whatever the browser would
+// otherwise have done with a dropped link, and then handed it to
+// handleCsvUpload anyway — some browsers represent a dragged link as a
+// tiny virtual file (e.g. a ".url" file) in dataTransfer.files, so it
+// didn't even hit the "no file" early return; it went all the way into
+// "parsed but produced no rows," a CSV error for something that was
+// never meant to be a CSV. Checking for "Files" specifically up front
+// means a dragged link now passes straight through untouched, the same
+// as it would on any other page.
+function dragCarriesFiles(e){
+  return !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
+}
 ['dragenter','dragover'].forEach(evt => {
-  document.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add('drag'); });
+  document.addEventListener(evt, e => {
+    if(!dragCarriesFiles(e)) return;
+    e.preventDefault();
+    dropZone.classList.add('drag');
+  });
 });
-['dragleave','drop'].forEach(evt => {
-  document.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.remove('drag'); });
+document.addEventListener('dragleave', e => {
+  if(!dragCarriesFiles(e)) return;
+  e.preventDefault();
+  dropZone.classList.remove('drag');
 });
 document.addEventListener('drop', e => {
+  if(!dragCarriesFiles(e)) return; // not a file — let the browser handle it normally (e.g. a dropped link)
   e.preventDefault();
+  dropZone.classList.remove('drag');
   const file = e.dataTransfer.files[0];
   if(!file) return;
   const reader = new FileReader();
