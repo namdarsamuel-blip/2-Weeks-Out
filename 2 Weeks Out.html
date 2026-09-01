@@ -7745,6 +7745,23 @@ document.addEventListener('drop', e => {
 
 window.addEventListener('beforeunload', () => { saveNotesNow(); });
 
+// See the big comment further below (by the polling loop) for the full
+// story on why this exists. Declared here, before initApp(), because
+// initApp() calls clearStaleSearchValue() synchronously on its very
+// first line — if searchInputUserEditedAt were declared after initApp()
+// is invoked (as a plain top-to-bottom `let` further down the file),
+// referencing it that early would throw a temporal-dead-zone error and
+// silently break the entire startup sequence.
+let searchInputUserEditedAt = 0;
+searchInput.addEventListener('keydown', () => { searchInputUserEditedAt = Date.now(); });
+searchInput.addEventListener('paste', () => { searchInputUserEditedAt = Date.now(); });
+function clearStaleSearchValue(){
+  if(!searchInput.value) return;
+  if(Date.now() - searchInputUserEditedAt < 1500) return; // don't clobber a real, just-typed search
+  searchInput.value = '';
+  searchInput.dispatchEvent(new Event('input', { bubbles:true }));
+}
+
 async function initApp(){
   applyColumnCount();
   // Some browsers restore a text input's last-typed value across a
@@ -7778,22 +7795,21 @@ async function initApp(){
   if(syncUrl) startSyncPolling();
 }
 initApp();
-// Belt-and-suspenders for the stale-search-value problem described in
-// initApp() above: browser form-state restoration doesn't always land
-// before that first synchronous clear runs, so these catch it at three
-// more points that cover the timings actually seen in practice —
-// shortly after the page settles (rAF, twice, since one frame isn't
-// always enough), on a bfcache/back-forward restore (pageshow with
-// persisted:true skips a fresh page load entirely, so initApp() never
-// reruns without this), and once more after a brief delay as a final
-// backstop. Each one is a no-op if the box is already empty.
-function clearStaleSearchValue(){
-  if(!searchInput.value) return;
-  searchInput.value = '';
-  searchInput.dispatchEvent(new Event('input', { bubbles:true }));
-}
-requestAnimationFrame(() => requestAnimationFrame(clearStaleSearchValue));
-setTimeout(clearStaleSearchValue, 300);
+// Belt-and-suspenders for the stale-search-value problem: browser
+// form-state restoration doesn't reliably land at any one fixed point
+// after load — it's been observed both before and well after every
+// fixed delay tried here, and on a bfcache/back-forward restore
+// (pageshow with persisted:true) initApp() never reruns at all. Rather
+// than guess another fixed delay, this polls for a few seconds right
+// after load and clears anything that shows up (searchInputUserEditedAt
+// and clearStaleSearchValue() itself are declared above, before
+// initApp(), for the TDZ-ordering reason explained there).
+let staleSearchCheckCount = 0;
+const staleSearchCheckInterval = setInterval(() => {
+  clearStaleSearchValue();
+  staleSearchCheckCount++;
+  if(staleSearchCheckCount > 20) clearInterval(staleSearchCheckInterval); // ~4s of polling, every 200ms
+}, 200);
 window.addEventListener('pageshow', clearStaleSearchValue);
 
 </script>
