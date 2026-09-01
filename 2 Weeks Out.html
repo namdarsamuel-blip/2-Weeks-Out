@@ -6744,13 +6744,25 @@ window.addEventListener('message', event => {
   if(event.source !== window) return;
   const data = event.data;
   if(!data || data.source !== 'ticket-library-opener-ext') return;
-  if(data.type === 'READY') extensionAvailable = true;
+  if(data.type === 'READY' && !extensionAvailable){
+    extensionAvailable = true;
+    console.log('[Ticket Library] companion extension detected — "Open all" will use it.');
+  }
   if(data.type === 'OPEN_TABS_DONE' && pendingExtensionOpenResolve){
     pendingExtensionOpenResolve(data.openedCount);
     pendingExtensionOpenResolve = null;
   }
 });
 window.postMessage({ source: 'ticket-library', type: 'PING' }, '*');
+// If nothing's answered the PING shortly after load, log that plainly
+// too — makes it obvious from this page's own console alone whether the
+// problem is "extension not detected at all" vs. something going wrong
+// after that point (which would show up in the extension's OWN console
+// instead — see the background service worker's "service worker" link
+// and this page's content script logs on chrome://extensions).
+setTimeout(() => {
+  if(!extensionAvailable) console.log('[Ticket Library] no response from the companion extension — either it isn\'t installed, isn\'t enabled, or this tab was open before it was installed (try reloading).');
+}, 1500);
 
 let pendingExtensionOpenResolve = null;
 function openTabsViaExtension(urls){
