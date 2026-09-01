@@ -229,6 +229,7 @@
     cursor:pointer;transition:background .15s ease;
   }
   .account-menu-item:hover{background:var(--card-hover);}
+  .account-menu-item.active{background:rgba(242,193,78,.1);color:var(--amber);}
   .account-menu-logout{color:var(--coral);}
   .account-menu-logout:hover{background:rgba(255,107,106,.1);}
   /* Every button keeps its natural size — only the search box is
@@ -1255,12 +1256,22 @@
     padding:9px 10px;outline:none;
   }
   .modal-text-input:focus{border-color:var(--teal);}
+  .long-text-prompt-input{resize:vertical;font-family:'Inter',sans-serif;line-height:1.5;min-height:100px;}
+  .long-text-prompt-hint{font-size:11px;color:var(--muted);margin:-8px 0 0;}
   .add-show-field{margin-bottom:12px;}
   .add-show-label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;}
   .add-show-hint{
     font-size:11.5px;color:var(--teal);background:rgba(79,200,191,.08);
     border:1px solid rgba(79,200,191,.3);border-radius:7px;padding:8px 10px;margin-bottom:12px;
   }
+  .add-show-paste-toggle{
+    display:block;width:100%;text-align:left;background:none;border:none;
+    font-family:'Inter',sans-serif;font-size:12px;color:var(--teal);cursor:pointer;
+    padding:2px 0 14px;
+  }
+  .add-show-paste-toggle:hover{text-decoration:underline;}
+  .add-show-paste-input{resize:vertical;font-family:'Inter',sans-serif;line-height:1.5;}
+  .add-show-paste-note{font-size:11px;color:var(--muted);margin:5px 0 0;}
   .add-show-submit-btn{
     width:100%;font-family:'Inter',sans-serif;font-size:13.5px;font-weight:700;
     padding:11px;border-radius:8px;border:none;background:var(--teal);color:#0d1a19;
@@ -1715,7 +1726,6 @@
         <button class="col-btn" id="redoBtn" type="button" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>↷</button>
       </div>
       <button class="filter-btn" id="newFilterBtn" title="Show only events added in the last upload">🆕 New only</button>
-      <button class="filter-btn" id="archiveFilterBtn" title="Show archived events instead of hiding them">📦 Archive</button>
       <button class="btn ghost" id="selectModeBtn" title="Select cards to archive or delete, like picking photos on a phone">🗑 Select</button>
       <button class="btn ghost" id="confirmArchiveBtn" style="display:none;" disabled>Archive</button>
       <button class="btn danger" id="confirmDeleteBtn" style="display:none;" disabled>Delete</button>
@@ -1725,7 +1735,6 @@
       <button class="btn ghost" id="markSeenBtn" title="Clear the NEW badge from every event on this sheet">✓ Mark seen</button>
       <button class="btn ghost" id="archivePastBtn" title="Archive every event dated before today — moves them out of the main view into Archive, nothing is deleted" style="display:none;">📦 Archive past</button>
       <button class="btn danger" id="deleteAllArchivedBtn" title="Permanently remove every archived event on this sheet — sent to History first, so it's still searchable and can be brought back from there" style="display:none;">🗑 Delete archived</button>
-      <button class="btn ghost" id="clearBtn" style="display:none;">🗑 Clear data</button>
       <button class="btn ghost" id="releaseAllPresaleBtn" style="display:none;" title="Move every show on this sheet onto a regular sheet at once — codes, notes, and prices all come with them">↗ Release all shows</button>
     </div>
     <div class="account-menu-wrap login-btn-pinned">
@@ -1835,6 +1844,18 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="longTextPromptModal" style="display:none;">
+  <div class="modal-box">
+    <h3 class="modal-title" id="longTextPromptModalTitle">Enter a note</h3>
+    <textarea autocomplete="off" id="longTextPromptModalInput" class="modal-text-input long-text-prompt-input" style="margin:14px 0;" rows="5"></textarea>
+    <p class="long-text-prompt-hint">Enter for a new line — ⌘/Ctrl+Enter or the button below to save.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="longTextPromptModalCancel">Cancel</button>
+      <button type="button" class="btn primary" id="longTextPromptModalOk">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="addShowModal" style="display:none;">
   <div class="modal-box insights-modal modal-box-wide">
     <div class="insights-modal-header">
@@ -1846,6 +1867,12 @@
       <div class="add-show-field">
         <label class="add-show-label">Ticket link</label>
         <input type="text" autocomplete="off" class="modal-text-input" id="addShowLinkInput" placeholder="Paste a Ticketmaster/VividSeats/StubHub link">
+      </div>
+      <button type="button" class="add-show-paste-toggle" id="addShowPasteToggle">📋 Or paste the event details from the page instead of typing them</button>
+      <div class="add-show-field" id="addShowPasteWrap" style="display:none;">
+        <label class="add-show-label">Pasted event details</label>
+        <textarea autocomplete="off" class="modal-text-input add-show-paste-input" id="addShowPasteInput" rows="3" placeholder="Select and copy the event name, date, and venue right off the ticket page, then paste the whole block here — e.g.:&#10;Herb Alpert &amp; The Tijuana Brass&#10;Fri, Sep 18, 2026, 8:00 PM&#10;Michigan Theater, Ann Arbor, MI"></textarea>
+        <p class="add-show-paste-note">This only reads text you copy and paste in yourself — nothing is fetched from the ticket site (their event pages block that kind of automated request).</p>
       </div>
       <div class="add-show-field">
         <label class="add-show-label">Show name</label>
@@ -1879,7 +1906,6 @@
 const $ = sel => document.querySelector(sel);
 const fileInput = $('#fileInput');
 const uploadBtn = $('#uploadBtn');
-const clearBtn = $('#clearBtn');
 const releaseAllPresaleBtn = $('#releaseAllPresaleBtn');
 const dropZone = $('#dropZone');
 const emptyState = $('#emptyState');
@@ -1908,7 +1934,6 @@ const colMinus = $('#colMinus');
 const colPlus = $('#colPlus');
 const colCount = $('#colCount');
 const newFilterBtn = $('#newFilterBtn');
-const archiveFilterBtn = $('#archiveFilterBtn');
 const undoBtn = $('#undoBtn');
 const redoBtn = $('#redoBtn');
 const expandCollapseBtn = $('#expandCollapseBtn');
@@ -1994,24 +2019,6 @@ function sheetVisibleToCurrentUser(sheet){
   if(privateMatch) return currentUser === privateMatch[2];
   return currentUserIsAdmin();
 }
-// Clearing is normally admin-only, same as every other destructive
-// action — but a private sheet is genuinely yours ("2 weeks out —
-// Priya" isn't shared with anyone), and presale specifically changes
-// every day, so waiting on an admin just to start it over each day
-// would be exactly the wrong kind of friction. The owner of a private
-// sheet can clear their own freely. US Open is the one sheet nobody can
-// clear at all, not even an admin — it's shared by everyone, so wiping
-// it is exactly the kind of one-click, hard-to-notice mistake that
-// shouldn't be possible; Archive past / Delete archived cover the same
-// "get old stuff out of the way" need without a full-sheet wipe.
-function canClearActiveSheet(){
-  const sheet = activeSheet();
-  if(!sheet || !currentUser) return false;
-  if(sheet.mode === 'usopen') return false;
-  const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
-  if(privateMatch) return currentUser === privateMatch[2];
-  return currentUserIsAdmin();
-}
 adminModeBtn.addEventListener('click', async () => {
   if(currentUser){
     // Logged in — open the small menu (Archive past / Log out) instead
@@ -2072,13 +2079,11 @@ accountMenuLogout.addEventListener('click', () => {
 });
 accountMenuArchived.addEventListener('click', () => {
   accountMenu.style.display = 'none';
-  // Same toggle as the toolbar's own 📦 Archive button — this is just a
-  // second, convenient way to reach it for whoever's already got the
-  // account menu open, not a different action. Kept in sync with that
-  // button's active state so neither one goes stale relative to the
-  // other.
+  // The only way left to reach this view now that the standalone
+  // toolbar button is gone — this menu item IS the toggle, not a
+  // shortcut to one anymore.
   archiveOnly = !archiveOnly;
-  archiveFilterBtn.classList.toggle('active', archiveOnly);
+  accountMenuArchived.classList.toggle('active', archiveOnly);
   updateDeleteAllArchivedBtnVisibility();
   render();
 });
@@ -2208,6 +2213,74 @@ const addShowVenueInput = $('#addShowVenueInput');
 const addShowDateInput = $('#addShowDateInput');
 const addShowSlugHint = $('#addShowSlugHint');
 const addShowSubmitBtn = $('#addShowSubmitBtn');
+const addShowPasteToggle = $('#addShowPasteToggle');
+const addShowPasteWrap = $('#addShowPasteWrap');
+const addShowPasteInput = $('#addShowPasteInput');
+
+addShowPasteToggle.addEventListener('click', () => {
+  const showing = addShowPasteWrap.style.display !== 'none';
+  addShowPasteWrap.style.display = showing ? 'none' : 'block';
+  if(!showing) addShowPasteInput.focus();
+});
+
+// The legitimate middle ground for a bare event-ID link, which has
+// nothing in the URL itself to parse (see parseTicketmasterSlugHint's
+// comment on why this app doesn't fetch ticket sites' pages directly).
+// The person is already looking at the event page to get their ticket
+// link in the first place — this just parses text THEY copy and paste
+// in, the same trust boundary as pasting a URL, never a fetch this page
+// initiates on its own. Handles the common 3-part shape every major
+// ticket site displays prominently on an event page: a name, a line
+// that reads as a date, and a venue/location line — in whichever of
+// those three actually appear, in whatever order they were pasted.
+function parsePastedEventDetails(text){
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if(!lines.length) return null;
+  // A date line reliably has a month name near some digits — this is
+  // deliberately loose (doesn't require a year or a time) since the
+  // goal is just to find WHICH line is the date, not to parse it here;
+  // parseEventDate (already used everywhere else in this app) does the
+  // actual parsing once this has isolated the right line for it.
+  const dateLineIdx = lines.findIndex(l =>
+    /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b/i.test(l) ||
+    /\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/.test(l)
+  );
+  let nameLines, dateLine, venueLines;
+  if(dateLineIdx === -1){
+    // No line reads as a date at all — best guess is just "first line is
+    // the name, everything else is the venue", still better than
+    // nothing.
+    nameLines = lines.slice(0, 1);
+    dateLine = null;
+    venueLines = lines.slice(1);
+  } else {
+    nameLines = lines.slice(0, dateLineIdx);
+    dateLine = lines[dateLineIdx];
+    venueLines = lines.slice(dateLineIdx + 1);
+  }
+  const nameHint = nameLines.join(' ').trim() || null;
+  const venueHint = venueLines.join(', ').trim() || null;
+  let dateStr = null;
+  if(dateLine){
+    const parsed = parseEventDate(dateLine);
+    // Re-formatted through the same parser that'll run again on submit,
+    // so what ends up in the Date field is guaranteed to re-parse
+    // correctly rather than depending on the exact punctuation of
+    // whatever the source site happened to use.
+    dateStr = parsed ? parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : dateLine;
+  }
+  if(!nameHint && !dateStr && !venueHint) return null;
+  return { nameHint, dateStr, venueHint };
+}
+addShowPasteInput.addEventListener('input', () => {
+  const hint = parsePastedEventDetails(addShowPasteInput.value);
+  if(!hint) return;
+  // Same "offered once, never fights a manual edit" rule as the link
+  // slug hint below.
+  if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
+  if(hint.venueHint && !addShowVenueInput.value.trim()) addShowVenueInput.value = hint.venueHint;
+  if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
+});
 
 function openAddShowModal(){
   if(!canAddToSheet(activeSheet())){
@@ -2218,6 +2291,8 @@ function openAddShowModal(){
   addShowNameInput.value = '';
   addShowVenueInput.value = '';
   addShowDateInput.value = '';
+  addShowPasteInput.value = '';
+  addShowPasteWrap.style.display = 'none';
   addShowSlugHint.style.display = 'none';
   addShowModal.style.display = 'flex';
   addShowLinkInput.focus();
@@ -2602,6 +2677,43 @@ function promptText(title, defaultValue){
     textPromptModalInput.addEventListener('keydown', onKeydown);
   });
 }
+// Multi-line sibling of promptText above, for the one spot a single
+// line genuinely isn't enough — a tour note. Enter inserts a newline
+// (a textarea's normal behavior, left alone) rather than submitting;
+// ⌘/Ctrl+Enter submits instead, same modifier-click pattern most chat
+// and note apps use for exactly this reason. The button is always
+// there too, for anyone who'd rather not remember a shortcut.
+const longTextPromptModal = $('#longTextPromptModal');
+const longTextPromptModalTitle = $('#longTextPromptModalTitle');
+const longTextPromptModalInput = $('#longTextPromptModalInput');
+const longTextPromptModalOk = $('#longTextPromptModalOk');
+const longTextPromptModalCancel = $('#longTextPromptModalCancel');
+function promptLongText(title, defaultValue){
+  return new Promise(resolve => {
+    longTextPromptModalTitle.textContent = title || 'Enter a note';
+    longTextPromptModalInput.value = defaultValue || '';
+    longTextPromptModal.style.display = 'flex';
+    setTimeout(() => { longTextPromptModalInput.focus(); longTextPromptModalInput.select(); }, 30);
+    function cleanup(){
+      longTextPromptModal.style.display = 'none';
+      longTextPromptModalOk.removeEventListener('click', onOk);
+      longTextPromptModalCancel.removeEventListener('click', onCancel);
+      longTextPromptModal.removeEventListener('click', onOverlay);
+      longTextPromptModalInput.removeEventListener('keydown', onKeydown);
+    }
+    function onOk(){ const v = longTextPromptModalInput.value; cleanup(); resolve(v); }
+    function onCancel(){ cleanup(); resolve(null); }
+    function onOverlay(e){ if(e.target === longTextPromptModal) onCancel(); }
+    function onKeydown(e){
+      if(e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onOk();
+      else if(e.key === 'Escape') onCancel();
+    }
+    longTextPromptModalOk.addEventListener('click', onOk);
+    longTextPromptModalCancel.addEventListener('click', onCancel);
+    longTextPromptModal.addEventListener('click', onOverlay);
+    longTextPromptModalInput.addEventListener('keydown', onKeydown);
+  });
+}
 // Reads whatever's on the Accounts sheet (if it exists yet) — starts
 // out empty (see the PEOPLE declaration above) until this actually
 // finds rows there, which is what makes every account created through
@@ -2801,13 +2913,6 @@ colPlus.addEventListener('click', () => {
 newFilterBtn.addEventListener('click', () => {
   newOnly = !newOnly;
   newFilterBtn.classList.toggle('active', newOnly);
-  render();
-});
-
-archiveFilterBtn.addEventListener('click', () => {
-  archiveOnly = !archiveOnly;
-  archiveFilterBtn.classList.toggle('active', archiveOnly);
-  updateDeleteAllArchivedBtnVisibility();
   render();
 });
 
@@ -4185,34 +4290,6 @@ async function handleCsvUpload(file, text){
   await saveEventsToActiveSheet(merged);
 }
 
-// Clear data now requires the same passcode as permanently deleting
-// from Trash — this is the one bulk action that used to wipe an entire
-// sheet with just a plain confirm() dialog, easy to click through
-// without really registering what it does. Also archives everything
-// into History first (see archiveSheetSnapshot) before wiping, so
-// "clear" now means "start fresh AND keep a snapshot of what this
-// looked like", not just "delete everything". No separate passcode
-// prompt here anymore — every path that calls this already checks
-// adminModeOn first, and that's now the one deliberate gate for every
-// destructive action in the app; stacking a second, different passcode
-// on top of it was redundant friction, not extra safety.
-async function clearActiveSheetEvents(){
-  pushUndo();
-  if(allEvents.length){
-    const clearedAt = new Date().toISOString();
-    const snapshot = allEvents.map(ev => {
-      const ann = getAnnotation(eventKey(ev));
-      return { ...ev, note: ann.note || '', rating: ann.rating || 0, pinned: false, sections: ann.sections || [], isNew: false, archived: false, noteHistory: ann.noteHistory || [], priceHistory: ann.priceHistory || [], extraLinks: ann.extraLinks || [], deletedAt: clearedAt, deletedFromSheet: activeSheetName };
-    });
-    await archiveSheetSnapshot(activeSheetName, snapshot);
-  }
-  allEvents = [];
-  annotations = {};
-  metaLine.textContent = '';
-  render();
-  await pushActiveSheetToRemote();
-}
-
 // Delete permissions, by sheet type: your own private sheet is fully
 // yours to clean up freely; US Open is the one sheet locked to a single
 // specific account by name (currentUser === 'Sam'), not just "whoever
@@ -4239,8 +4316,12 @@ function canDeleteFromSheet(sheet){
 // should be kept out of. Editing what's already there (notes, star,
 // pin, prices, sections, archiving) stays open to everyone logged in —
 // this only gates bringing new rows onto the sheet in the first place.
+// Every OTHER sheet stays exactly as open to adding as it always was —
+// no login required — since this restriction is specifically about US
+// Open being shared communal data, not a general "must be logged in to
+// add anything anywhere" rule.
 function canAddToSheet(sheet){
-  if(!sheet || !currentUser) return false;
+  if(!sheet) return false;
   if(sheet.mode === 'usopen') return currentUser === 'Sam';
   return true;
 }
@@ -4634,7 +4715,7 @@ function createSheetFromModal(){
   newOnly = false;
   newFilterBtn.classList.remove('active');
   archiveOnly = false;
-  archiveFilterBtn.classList.remove('active');
+  accountMenuArchived.classList.remove('active');
   collapsedSections = new Set();
   expandCycleState = 2;
   savedCollapsedSections = null;
@@ -4664,7 +4745,7 @@ function setActiveSheet(name){
   newOnly = false;
   newFilterBtn.classList.remove('active');
   archiveOnly = false;
-  archiveFilterBtn.classList.remove('active');
+  accountMenuArchived.classList.remove('active');
   collapsedSections = new Set();
   expandCycleState = 2;
   savedCollapsedSections = null;
@@ -5041,7 +5122,6 @@ function render(){
   // defense rather than assuming that redirect always caught it.
   if(activeSheet() && !sheetVisibleToCurrentUser(activeSheet())){
     emptyState.style.display = 'block';
-    clearBtn.style.display = 'none';
     if(typeof releaseAllPresaleBtn !== 'undefined') releaseAllPresaleBtn.style.display = 'none';
     listRoot.innerHTML = '';
     countLabel.textContent = '';
@@ -5120,7 +5200,6 @@ function renderPresale(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
   updateDeleteAllArchivedBtnVisibility();
   releaseAllPresaleBtn.style.display = hasData ? 'block' : 'none';
 
@@ -5279,7 +5358,6 @@ function searchNoResultsHtml(query, allSearchableEvents){
 // pushCrossSheetEventEdit).
 function renderSearchResults(query){
   emptyState.style.display = 'none';
-  clearBtn.style.display = 'none';
 
   const { events, annotationsMap } = buildEventsAndAnnotations(remoteCache);
 
@@ -5585,7 +5663,6 @@ function renderStandard(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
   updateDeleteAllArchivedBtnVisibility();
   releaseAllPresaleBtn.style.display = 'none';
 
@@ -6886,7 +6963,6 @@ function renderUsOpen(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
   updateDeleteAllArchivedBtnVisibility();
   releaseAllPresaleBtn.style.display = 'none';
 
@@ -6958,7 +7034,6 @@ function renderBroadway(){
   const query = searchInput.value.trim().toLowerCase();
   const hasData = allEvents.length > 0;
   emptyState.style.display = hasData ? 'none' : 'block';
-  clearBtn.style.display = (hasData && canClearActiveSheet()) ? 'block' : 'none';
   updateDeleteAllArchivedBtnVisibility();
   releaseAllPresaleBtn.style.display = 'none';
 
@@ -7135,14 +7210,6 @@ fileInput.addEventListener('change', e => {
   reader.onerror = () => alert('Could not read that file.');
   reader.readAsText(file);
   fileInput.value = '';
-});
-
-clearBtn.addEventListener('click', () => {
-  if(!canClearActiveSheet()){
-    alert(activeSheetMode() === 'usopen' ? "US Open can't be fully cleared — archive what you don't want to see instead (Archive past, or Select and Archive)." : 'Clearing this sheet requires being logged in as its owner, or as admin.');
-    return;
-  }
-  clearActiveSheetEvents();
 });
 
 releaseAllPresaleBtn.addEventListener('click', () => {
@@ -7326,7 +7393,7 @@ listRoot.addEventListener('click', async e => {
   if(tourNoteBtn){
     const heading = tourNoteBtn.dataset.heading;
     const current = tourNotes[heading] || '';
-    const entered = prompt(`Note for "${heading}" (applies to the whole tour, not any single show):`, current);
+    const entered = await promptLongText(`Note for "${heading}" — applies to the whole tour, not any single show`, current);
     if(entered === null) return;
     await saveTourNote(heading, entered);
     render();
