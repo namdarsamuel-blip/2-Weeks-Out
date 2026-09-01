@@ -414,8 +414,17 @@
   }
   .day-heading.artist-subheading:hover .heading-label{color:var(--text);}
   .day-heading.artist-subheading .collapse-caret{width:10px;height:10px;}
+  /* Every trailing icon on a heading (release, tour-note, bulk-code,
+     pin) lives in one wrapper pushed to the far right as a group — a
+     single margin-left:auto here, rather than chaining it through
+     whichever specific button happened to render first, since that set
+     changes per row (release only shows for presale, code/pin only
+     when there's something to act on) and a chain like that silently
+     breaks the moment the icons get reordered or one is conditionally
+     missing.  */
+  .heading-icons{margin-left:auto;flex:0 0 auto;display:flex;align-items:center;gap:4px;}
   .heading-pin-btn{
-    margin-left:auto;flex:0 0 auto;
+    flex:0 0 auto;
     width:26px;height:26px;border-radius:6px;border:1px solid transparent;
     background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;
     cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease;
@@ -423,16 +432,11 @@
   .heading-pin-btn:hover{background:var(--card-hover);border-color:var(--hairline);color:var(--text);}
   .heading-pin-btn.active{color:var(--pin);transform:rotate(-10deg);}
   .heading-code-btn{
-    position:relative;margin-left:auto;flex:0 0 auto;
+    position:relative;flex:0 0 auto;
     width:26px;height:26px;border-radius:6px;border:1px solid transparent;
     background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;
     cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease;
   }
-  /* If a pin button follows it, that one's own margin-left:auto only
-     pushes itself right, not this — without its own auto margin too,
-     this would be left stranded right after the label text instead of
-     grouped with the pin button over on the right. */
-  .heading-code-btn + .heading-pin-btn{margin-left:0;}
   .heading-code-btn:hover{background:var(--card-hover);border-color:var(--hairline);color:var(--amber);}
   .heading-code-btn-plus{position:absolute;right:1px;bottom:1px;background:var(--card);border-radius:50%;}
   .heading-release-btn{
@@ -442,7 +446,6 @@
     cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease;
   }
   .heading-release-btn:hover{background:var(--card-hover);border-color:var(--hairline);color:var(--teal);}
-  .heading-note-btn{margin-left:4px;}
   .heading-note-btn.active{color:var(--amber);}
   .heading-note-btn:hover{background:var(--card-hover);border-color:var(--hairline);color:var(--amber);}
   .heading-tour-note{
@@ -463,7 +466,7 @@
      entire remaining list width, disconnected from the name they
      belong to. Keeping them right next to the name here instead;
      regular headings elsewhere are untouched. */
-  .artist-subheading .heading-code-btn, .artist-subheading .heading-pin-btn, .artist-subheading .heading-release-btn{margin-left:6px;}
+  .artist-subheading .heading-icons{margin-left:6px;}
   .bulk-open-links{margin-left:auto;flex:0 0 auto;display:flex;gap:6px;}
   .bulk-open-btn{
     font-family:'Inter',sans-serif;font-size:11px;font-weight:600;
@@ -6973,7 +6976,8 @@ function dayHeadingHtml(label, extraHtml = '', pinKeys = null, sectionKeyOverrid
   const tourNotePreview = existingNote ? `<div class="heading-tour-note" data-action="edit-tour-note" data-heading="${escapeHtml(label)}" title="Click to edit">📝 ${escapeHtml(existingNote)}</div>` : '';
   return `<div class="day-heading collapsible-heading ${extraClass} ${collapsed ? 'collapsed' : ''}" data-section="${escapeHtml(key)}">
     <svg class="collapse-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
-    <span class="heading-label">${escapeHtml(label)}</span>${extraHtml}${bulkCodeBtn}${bulkReleaseBtn}${tourNoteBtn}${pinBtn}
+    <span class="heading-label">${escapeHtml(label)}</span>${extraHtml}
+    <div class="heading-icons">${bulkReleaseBtn}${tourNoteBtn}${bulkCodeBtn}${pinBtn}</div>
   </div>${tourNotePreview}`;
 }
 
