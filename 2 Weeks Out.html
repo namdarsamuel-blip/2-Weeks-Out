@@ -1782,7 +1782,7 @@
 <div class="modal-overlay" id="passcodeModal" style="display:none;">
   <div class="modal-box">
     <h3 class="modal-title" id="passcodeModalTitle">Enter your passcode</h3>
-    <input type="password" inputmode="numeric" autocomplete="off" id="passcodeModalInput" class="modal-text-input" style="margin:14px 0;" placeholder="••••">
+    <input type="text" inputmode="numeric" autocomplete="off" name="ticketwatch-passcode-nofill" data-lpignore="true" data-1p-ignore="true" data-form-type="other" id="passcodeModalInput" class="modal-text-input" style="margin:14px 0;" placeholder="••••">
     <div class="modal-actions">
       <button type="button" class="btn ghost" id="passcodeModalCancel">Cancel</button>
       <button type="button" class="btn primary" id="passcodeModalOk">OK</button>
@@ -2389,15 +2389,73 @@ async function saveTourNote(heading, note){
 // only needs its prompt() swapped for promptPasscode(...) and nothing
 // else about the surrounding logic changes — resolves with the typed
 // value on OK, or null on Cancel/Escape, same contract prompt() has.
+//
+// The input itself is type="text", not type="password" — deliberately.
+// A real type="password" field is exactly what once caused this: with
+// a plain text input (the search box, or the name field when creating
+// an account) typed into right before it, Chrome's own heuristics read
+// that as a login form and, at some point, offered to save it as a
+// credential — which is why "US Open" (once typed into search, or used
+// as a test account name) kept coming back as a suggested "username"
+// with this passcode as its "password" any time a text field got
+// focused, complete with Chrome's own password-manager dropdown UI.
+// autocomplete="off" and the data-*ignore attributes don't stop this —
+// Chrome deliberately overrides those once a credential is genuinely
+// saved. Using a masked plain-text field instead (see maskInputAsDots
+// below) removes the one signal (an actual password field) Chrome
+// needs to treat any of this as a login form in the first place, so it
+// can't happen again going forward. Anyone who already has "US Open"
+// saved from before this change will still need to remove it once from
+// their own browser's password manager — that part's real saved data
+// on their machine, not something this page can reach in from outside.
 const passcodeModal = $('#passcodeModal');
 const passcodeModalTitle = $('#passcodeModalTitle');
 const passcodeModalInput = $('#passcodeModalInput');
 const passcodeModalOk = $('#passcodeModalOk');
 const passcodeModalCancel = $('#passcodeModalCancel');
+// Turns a plain text input into a dots-only display (like type=password)
+// while tracking the real typed value separately in closure state,
+// using beforeinput so every insert/delete/paste is handled precisely
+// (cursor position included) rather than guessing from a before/after
+// diff. Returns {getValue, reset} — the input's own .value is only ever
+// bullets, never the real passcode, which is what keeps it out of
+// Chrome's password-field detection.
+function maskInputAsDots(inputEl){
+  let real = '';
+  inputEl.addEventListener('beforeinput', e => {
+    e.preventDefault();
+    const start = inputEl.selectionStart, end = inputEl.selectionEnd;
+    let newPos = start;
+    if(e.inputType === 'insertText' || e.inputType === 'insertFromPaste' || e.inputType === 'insertFromDrop'){
+      const text = e.data || (e.dataTransfer && e.dataTransfer.getData('text')) || '';
+      real = real.slice(0, start) + text + real.slice(end);
+      newPos = start + text.length;
+    } else if(e.inputType === 'deleteContentBackward'){
+      if(start === end && start > 0){ real = real.slice(0, start - 1) + real.slice(end); newPos = start - 1; }
+      else { real = real.slice(0, start) + real.slice(end); newPos = start; }
+    } else if(e.inputType === 'deleteContentForward'){
+      if(start === end && start < real.length){ real = real.slice(0, start) + real.slice(start + 1); }
+      else { real = real.slice(0, start) + real.slice(end); }
+      newPos = start;
+    } else if(e.inputType === 'deleteByCut' || e.inputType === 'deleteContent'){
+      real = real.slice(0, start) + real.slice(end);
+      newPos = start;
+    } else {
+      return; // unrecognized input type — leave real/display untouched rather than risk corrupting it
+    }
+    inputEl.value = '•'.repeat(real.length);
+    inputEl.setSelectionRange(newPos, newPos);
+  });
+  return {
+    getValue: () => real,
+    reset: () => { real = ''; inputEl.value = ''; }
+  };
+}
+const passcodeMask = maskInputAsDots(passcodeModalInput);
 function promptPasscode(title){
   return new Promise(resolve => {
     passcodeModalTitle.textContent = title || 'Enter your passcode';
-    passcodeModalInput.value = '';
+    passcodeMask.reset();
     passcodeModal.style.display = 'flex';
     setTimeout(() => passcodeModalInput.focus(), 30);
     function cleanup(){
@@ -2407,7 +2465,7 @@ function promptPasscode(title){
       passcodeModal.removeEventListener('click', onOverlay);
       passcodeModalInput.removeEventListener('keydown', onKeydown);
     }
-    function onOk(){ const v = passcodeModalInput.value; cleanup(); resolve(v); }
+    function onOk(){ const v = passcodeMask.getValue(); cleanup(); resolve(v); }
     function onCancel(){ cleanup(); resolve(null); }
     function onOverlay(e){ if(e.target === passcodeModal) onCancel(); }
     function onKeydown(e){
