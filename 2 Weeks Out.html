@@ -5253,7 +5253,7 @@ function renderPresale(){
         flushPinnedGrid();
         const pinKeys = (sortMode === 'name' || sortMode === 'venue') ? g.events.map(eventKey) : null;
         const bulkCodeKeys = sortMode === 'name' ? pinKeys : null;
-        html += dayHeadingHtml(g.heading, '', pinKeys, 'pinned:' + g.heading, '', bulkCodeKeys);
+        html += dayHeadingHtml(g.heading, bulkOpenLinksHtml(), pinKeys, 'pinned:' + g.heading, '', bulkCodeKeys);
       }
       g.events.forEach(ev => pinnedPending.push(cardHtmlPresale(ev)));
     });
@@ -5301,7 +5301,7 @@ function renderPresale(){
       // grouping by artist), releasing "everything dropping at 10am" is
       // a meaningful action no matter how the list is currently sorted.
       const bulkReleaseKeys = g.events.map(eventKey);
-      html += dayHeadingHtml(g.heading, isToday ? '<span class="tag-today">Today</span>' : '', pinKeys, null, isHourBand ? 'hour-heading' : '', bulkCodeKeys, bulkReleaseKeys);
+      html += dayHeadingHtml(g.heading, (isToday ? '<span class="tag-today">Today</span>' : '') + bulkOpenLinksHtml(), pinKeys, null, isHourBand ? 'hour-heading' : '', bulkCodeKeys, bulkReleaseKeys);
     }
     if(sortMode === 'date'){
       // Within a single presale-time (or show-date-fallback) bucket,
@@ -5317,7 +5317,7 @@ function renderPresale(){
       // heading at the same level.
       groupByName(g.events).forEach(nameGroup => {
         if(nameGroup.showHeading){
-          html += dayHeadingHtml(nameGroup.heading, '', nameGroup.events.map(eventKey), g.heading + ' :: ' + nameGroup.heading, 'artist-subheading', nameGroup.events.map(eventKey), nameGroup.events.map(eventKey));
+          html += dayHeadingHtml(nameGroup.heading, bulkOpenLinksHtml(), nameGroup.events.map(eventKey), g.heading + ' :: ' + nameGroup.heading, 'artist-subheading', nameGroup.events.map(eventKey), nameGroup.events.map(eventKey));
         }
         html += `<div class="day-grid" ${colStyle}>${nameGroup.events.map(cardHtmlPresale).join('')}</div>`;
       });
@@ -5445,7 +5445,7 @@ function renderSearchResults(query){
     searchGroups.forEach(g => {
       if(g.showHeading){
         const pinKeys = g.events.map(eventKey);
-        html += dayHeadingHtml(g.heading, '', pinKeys);
+        html += dayHeadingHtml(g.heading, bulkOpenLinksHtml(), pinKeys);
       }
       // Show each result the way its own sheet actually shows it — a
       // presale event still needs its Code/public-sale-date field visible
@@ -5728,7 +5728,7 @@ function renderStandard(){
         flushPinnedGrid();
         const pinKeys = (sortMode === 'name' || sortMode === 'venue') ? g.events.map(eventKey) : null;
         const bulkCodeKeys = sortMode === 'name' ? pinKeys : null;
-        htmlParts.push(dayHeadingHtml(g.heading, '', pinKeys, 'pinned:' + g.heading, '', bulkCodeKeys));
+        htmlParts.push(dayHeadingHtml(g.heading, bulkOpenLinksHtml(), pinKeys, 'pinned:' + g.heading, '', bulkCodeKeys));
       }
       g.events.forEach(ev => pinnedPending.push(cardHtmlStandard(ev)));
     });
@@ -5751,7 +5751,7 @@ function renderStandard(){
       // 3" isn't a category to pin the way an artist or venue is.
       const pinKeys = (sortMode === 'name' || sortMode === 'venue') ? g.events.map(eventKey) : null;
       const bulkCodeKeys = sortMode === 'name' ? pinKeys : null;
-      htmlParts.push(dayHeadingHtml(g.heading, isToday ? '<span class="tag-today">Today</span>' : '', pinKeys, null, '', bulkCodeKeys));
+      htmlParts.push(dayHeadingHtml(g.heading, (isToday ? '<span class="tag-today">Today</span>' : '') + bulkOpenLinksHtml(), pinKeys, null, '', bulkCodeKeys));
     }
     g.events.forEach(ev => pendingCards.push(cardHtmlStandard(ev)));
   });
@@ -6682,8 +6682,16 @@ function dnMergedCardHtml(row, labelOverride){
 // by each card's actual rendered top position (not a fixed column-count
 // assumption), so this holds even if the grid reflows at a different
 // width.
-function openAllLinksForCategory(gridEl, platformClass, platformLabel){
-  const cards = Array.from(gridEl.querySelectorAll('.ticket.dn-merged'));
+// US Open/Broadway's merged day/night cards — link buttons live inside
+// per-slot .shift-block wrappers, so getting the right open ORDER
+// (chronological, day-slot-then-night-slot, matching what's on screen)
+// needs the position-based row logic below. accepts multiple grids
+// (not just one) since a single heading can be followed by several —
+// Pinned and hour-band sections group into more than one .day-grid
+// under one heading, and this needs every one of them, not just the
+// first.
+function openAllLinksForCategory(gridEls, platformClass, platformLabel){
+  const cards = gridEls.flatMap(gridEl => Array.from(gridEl.querySelectorAll('.ticket.dn-merged')));
   if(!cards.length) return;
   // Group into visual rows by top position (rounded, so sub-pixel
   // rendering differences don't split one real row into two).
@@ -6719,11 +6727,21 @@ function openAllLinksForCategory(gridEl, platformClass, platformLabel){
     });
   });
 
-  if(!urls.length){
-    alert('No links found for that platform in this section.');
-    return;
-  }
-  startBulkOpenQueue(urls, platformLabel);
+  bulkOpenSection(urls, platformLabel);
+}
+// Every other card type (Standard, Presale, and Broadway when it isn't
+// showing merged matinee/evening pairs) — no shift-block indirection,
+// no day/night ordering to reconstruct, just every matching link button
+// across however many grids this section actually has, in the plain
+// order they already appear on screen.
+function openAllPlainLinksForGrids(gridEls, platformClass, platformLabel){
+  const urls = [];
+  gridEls.forEach(gridEl => {
+    gridEl.querySelectorAll(`.link-btn.${platformClass}`).forEach(link => {
+      if(link.href) urls.push(link.href);
+    });
+  });
+  bulkOpenSection(urls, platformLabel);
 }
 
 // ---------- Companion extension bridge ----------
@@ -6770,6 +6788,34 @@ function openTabsViaExtension(urls){
     pendingExtensionOpenResolve = resolve;
     window.postMessage({ source: 'ticket-library', type: 'OPEN_TABS', urls }, '*');
   });
+}
+
+// This is what a per-section ↗ TM/Vivid/Stub heading button actually
+// calls — with the extension installed, "open everything in this
+// section" should just... happen, not hand back a click-through-each-
+// one queue the extension makes unnecessary. That interactive toast
+// (see startBulkOpenQueue/renderBulkOpenToast) is still the right tool
+// without the extension, where a browser's popup blocker genuinely
+// can't guarantee more than one tab per click — it stays as the
+// fallback for that case, unchanged.
+async function bulkOpenSection(urls, label){
+  if(!urls.length){
+    alert('No links found for that platform in this section.');
+    return;
+  }
+  if(extensionAvailable){
+    await openTabsViaExtension(urls);
+    showTransientBulkOpenToast(`⚡ Opened ${urls.length} ${label} link${urls.length === 1 ? '' : 's'}`);
+  } else {
+    startBulkOpenQueue(urls, label);
+  }
+}
+let transientToastTimeout = null;
+function showTransientBulkOpenToast(message){
+  clearTimeout(transientToastTimeout);
+  bulkOpenToast.innerHTML = `<span class="bulk-open-toast-text">${escapeHtml(message)}</span>`;
+  bulkOpenToast.style.display = 'flex';
+  transientToastTimeout = setTimeout(() => { bulkOpenToast.style.display = 'none'; }, 2200);
 }
 
 // A browser's popup blocker only ever guarantees ONE thing reliably:
@@ -7156,7 +7202,7 @@ function renderBroadway(){
         flushPinnedGrid();
         const pinKeys = (sortMode === 'name' || sortMode === 'venue') ? g.events.map(eventKey) : null;
         const bulkCodeKeys = sortMode === 'name' ? pinKeys : null;
-        html += dayHeadingHtml(g.heading, '', pinKeys, 'pinned:' + g.heading, '', bulkCodeKeys);
+        html += dayHeadingHtml(g.heading, bulkOpenLinksHtml(), pinKeys, 'pinned:' + g.heading, '', bulkCodeKeys);
       }
       g.events.forEach(ev => pinnedPending.push(pinnedCardHtml(ev)));
     });
@@ -7170,7 +7216,7 @@ function renderBroadway(){
     if(g.showHeading){
       const pinKeys = (sortMode === 'name' || sortMode === 'venue') ? g.events.map(eventKey) : null;
       const bulkCodeKeys = sortMode === 'name' ? pinKeys : null;
-      html += dayHeadingHtml(g.heading, isToday ? '<span class="tag-today">Today</span>' : '', pinKeys, null, '', bulkCodeKeys);
+      html += dayHeadingHtml(g.heading, (isToday ? '<span class="tag-today">Today</span>' : '') + bulkOpenLinksHtml(), pinKeys, null, '', bulkCodeKeys);
     }
     // Split into per-show subgroups so a merged card never mixes two
     // different shows' sessions together. When already grouped by date,
@@ -7474,9 +7520,31 @@ listRoot.addEventListener('click', async e => {
   const bulkOpenBtn = e.target.closest('[data-action="bulk-open"]');
   if(bulkOpenBtn){
     const heading = bulkOpenBtn.closest('.day-heading');
-    const grid = heading ? heading.nextElementSibling : null;
-    if(grid && grid.classList.contains('day-grid')){
-      openAllLinksForCategory(grid, bulkOpenBtn.dataset.platform, bulkOpenBtn.textContent.replace('↗ ', '').trim());
+    if(heading){
+      // Walk forward collecting every .day-grid that belongs to this
+      // heading — usually just one, but Pinned/hour-band sections group
+      // several sub-headings (each with their own grid) under one
+      // parent, and Broadway can have more than one show's grid under a
+      // single date heading too. Stops at the next TOP-LEVEL heading
+      // (artist-subheading doesn't count — walking through those, not
+      // stopping at them, is what lets a Pinned/hour-band heading's
+      // button reach every sub-group's cards). A subheading's own
+      // button naturally stops at the very next heading regardless of
+      // type, since it only ever has the one grid right after it.
+      const isSubheading = heading.classList.contains('artist-subheading');
+      const grids = [];
+      let sib = heading.nextElementSibling;
+      while(sib){
+        if(sib.classList.contains('day-heading') && (isSubheading || !sib.classList.contains('artist-subheading'))) break;
+        if(sib.classList.contains('day-grid')) grids.push(sib);
+        sib = sib.nextElementSibling;
+      }
+      if(grids.length){
+        const platformLabel = bulkOpenBtn.textContent.replace('↗ ', '').trim();
+        const isMerged = grids.some(g => g.querySelector('.ticket.dn-merged'));
+        if(isMerged) openAllLinksForCategory(grids, bulkOpenBtn.dataset.platform, platformLabel);
+        else openAllPlainLinksForGrids(grids, bulkOpenBtn.dataset.platform, platformLabel);
+      }
     }
     return;
   }
