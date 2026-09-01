@@ -2200,6 +2200,10 @@ const addShowSlugHint = $('#addShowSlugHint');
 const addShowSubmitBtn = $('#addShowSubmitBtn');
 
 function openAddShowModal(){
+  if(!canAddToSheet(activeSheet())){
+    alert("Only Sam can add shows to US Open — everyone can still edit what's already there (notes, star, pin, prices).");
+    return;
+  }
   addShowLinkInput.value = '';
   addShowNameInput.value = '';
   addShowVenueInput.value = '';
@@ -4118,6 +4122,10 @@ async function saveEventsToActiveSheet(events){
 // from a previous upload gets cleared, so it always reflects "what just
 // showed up," not an accumulating pile of old badges.
 async function handleCsvUpload(file, text){
+  if(!canAddToSheet(activeSheet())){
+    alert("Only Sam can add shows to US Open — everyone can still edit what's already there (notes, star, pin, prices).");
+    return;
+  }
   const records = recordsFromCSV(text);
   if(!records.length){
     alert('That CSV parsed but produced no rows. Check that it matches the expected format.');
@@ -4190,18 +4198,35 @@ async function clearActiveSheetEvents(){
 }
 
 // Delete permissions, by sheet type: your own private sheet is fully
-// yours to clean up freely; US Open is the one sheet only an admin
-// account can delete from (though anyone logged in can still edit it —
-// this is specifically about removal); an ownerless sheet (no person
-// suffix — same rule as sheetVisibleToCurrentUser) only an admin can
-// delete from too, since only an admin can even see one in the first
-// place.
+// yours to clean up freely; US Open is the one sheet locked to a single
+// specific account by name (currentUser === 'Sam'), not just "whoever
+// happens to hold admin" — a deliberate exception to how every other
+// permission in this app works (see currentUserIsAdmin's own comment on
+// why hardcoded names were removed everywhere else). US Open is shared
+// by the whole office and never had a real "owner" concept the way a
+// private sheet does, so its one truly destructive action is locked to
+// one named, trusted account instead of "admin," which anyone could
+// become by being first to sign up on a fresh sheet. An ownerless sheet
+// (no person suffix — same rule as sheetVisibleToCurrentUser) stays
+// admin-gated, unaffected by this.
 function canDeleteFromSheet(sheet){
   if(!sheet || !currentUser) return false;
-  if(sheet.mode === 'usopen') return currentUserIsAdmin();
+  if(sheet.mode === 'usopen') return currentUser === 'Sam';
   const privateMatch = sheet.name.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
   return currentUserIsAdmin();
+}
+// Same "Sam specifically, not just admin" rule as canDeleteFromSheet
+// above, for the other half of "no one allowed to delete US Open or add
+// on to it unless Sam" — adding new shows (CSV upload, + Add show) is
+// the other genuinely structural change to the sheet everyone else
+// should be kept out of. Editing what's already there (notes, star,
+// pin, prices, sections, archiving) stays open to everyone logged in —
+// this only gates bringing new rows onto the sheet in the first place.
+function canAddToSheet(sheet){
+  if(!sheet || !currentUser) return false;
+  if(sheet.mode === 'usopen') return currentUser === 'Sam';
+  return true;
 }
 // Removes a single event (and its note/rating/pin/prices) — from the
 // active sheet normally, or from its actual home sheet if it's a
@@ -5362,16 +5387,16 @@ function renderSearchResults(query){
 // currently live for them. Each past show keeps its old note and code
 // visible, can be brought back onto a real sheet with one click, or
 // permanently removed — scoped the same way regular deleting is: your
-// own stuff is always yours to permanently clear, US Open only an admin
-// account can remove (though again, this is specifically about
-// deleting — anyone can still browse and bring back a US Open show),
-// and a sheet with no owner only an admin can, same rule as everywhere
-// else an ownerless sheet shows up.
+// own stuff is always yours to permanently clear, US Open locked to
+// Sam specifically (same rule as canDeleteFromSheet — anyone can still
+// browse and bring back a US Open show, this is just the permanent-
+// delete-from-History step), and a sheet with no owner only an admin
+// can, same rule as everywhere else an ownerless sheet shows up.
 function canPermanentlyDeleteHistoryItem(ev){
   if(!currentUser) return false;
   const deletedFrom = ev.deletedFromSheet || '';
   const sheetObj = sheets.find(s => s.name === deletedFrom);
-  if((sheetObj && sheetObj.mode === 'usopen') || deletedFrom === 'US Open') return currentUserIsAdmin();
+  if((sheetObj && sheetObj.mode === 'usopen') || deletedFrom === 'US Open') return currentUser === 'Sam';
   const privateMatch = deletedFrom.match(/^(.+) — (.+)$/);
   if(privateMatch) return currentUser === privateMatch[2];
   return currentUserIsAdmin();
@@ -6613,10 +6638,12 @@ function openAllLinksForCategory(gridEl, platformClass, platformLabel){
 // click always works. A loop firing 20+ opens from that same click does
 // not — different browsers cap it at different counts, some silently
 // drop the rest, and there's no page-level way to detect or override
-// that. So "Open next" (one link per click) stays the default, reliable
-// path — but "Try opening all at once" is also offered as an explicit
-// opt-in gamble, since some browsers/extensions genuinely do allow a
-// full burst through and it costs nothing to try it first.
+// that. "Open next" (one link per click, always reliable) is the
+// default first click; "Open all" (see openAllRemainingInBulkQueue) is
+// offered right alongside it as an explicit one-click attempt at
+// everything at once — worth trying since plenty of real browser/
+// extension setups do let a full burst through, it just isn't
+// guaranteed the way one-at-a-time is.
 let bulkOpenQueue = null; // { urls, index, label }
 function startBulkOpenQueue(urls, label){
   bulkOpenQueue = { urls, index: 0, label };
@@ -6669,6 +6696,25 @@ function openNextInBulkQueue(){
   bulkOpenQueue.index++;
   renderBulkOpenToast();
 }
+// Fires every remaining URL synchronously, all within this one click's
+// call stack, instead of one per click like openNextInBulkQueue above.
+// Whether this actually gets every tab through is entirely up to the
+// browser's own popup blocker — some allow a full burst like this from
+// a single genuine click, some silently cap it partway — there's no
+// reliable way for a page to detect which happened or how many
+// actually opened. That's fine here: bulkOpenQueue.index only advances
+// past what this function actually asked the browser to open, so
+// renderBulkOpenToast() afterward is always correct regardless of how
+// many the browser actually let through — anything still short shows
+// up as remaining, ready for "Open next" or another "Open all" attempt.
+function openAllRemainingInBulkQueue(){
+  if(!bulkOpenQueue) return;
+  while(bulkOpenQueue.index < bulkOpenQueue.urls.length){
+    openUrlInBackground(bulkOpenQueue.urls[bulkOpenQueue.index]);
+    bulkOpenQueue.index++;
+  }
+  renderBulkOpenToast();
+}
 function renderBulkOpenToast(){
   if(!bulkOpenQueue || bulkOpenQueue.index >= bulkOpenQueue.urls.length){
     bulkOpenToast.style.display = 'none';
@@ -6697,6 +6743,7 @@ function renderBulkOpenToast(){
   bulkOpenToast.innerHTML = `
     <span class="bulk-open-toast-text">Opened ${index} of ${urls.length} ${escapeHtml(label)} links</span>
     <button type="button" class="bulk-open-toast-btn primary" data-action="bulk-open-next">Open next (${remaining} left)</button>
+    <button type="button" class="bulk-open-toast-btn" data-action="bulk-open-all" title="Fires every remaining link in one go, all from this one click — some browsers allow a whole burst like this through, some cap it partway and silently drop the rest with no way for this page to tell which happened. Worth trying first; anything that didn't make it through still shows up here to open with the other options.">⚡ Open all (${remaining})</button>
     <button type="button" class="bulk-open-toast-btn" data-action="bulk-open-download-bookmarks" title="Downloads a bookmarks file — import it into your browser, then right-click the folder and choose Open All. This actually opens everything at once, since it uses your browser's own bookmark feature instead of fighting its popup blocker.">⬇ Download as bookmarks</button>
     <button type="button" class="bulk-open-toast-btn" data-action="bulk-open-copy-next">Copy next link</button>
     <button type="button" class="bulk-open-toast-btn" data-action="bulk-open-dismiss">Done</button>
@@ -6745,6 +6792,10 @@ ${links}
 bulkOpenToast.addEventListener('click', e => {
   if(e.target.closest('[data-action="bulk-open-next"]')){
     openNextInBulkQueue();
+    return;
+  }
+  if(e.target.closest('[data-action="bulk-open-all"]')){
+    openAllRemainingInBulkQueue();
     return;
   }
   if(e.target.closest('[data-action="bulk-open-download-bookmarks"]')){
