@@ -6726,6 +6726,40 @@ function openAllLinksForCategory(gridEl, platformClass, platformLabel){
   startBulkOpenQueue(urls, platformLabel);
 }
 
+// ---------- Companion extension bridge ----------
+// A webpage's own script fundamentally can't reliably open a burst of
+// tabs — window.open() from a single click is capped by the browser's
+// popup blocker, differently in every browser, with no way for the page
+// to detect how many actually got through. A browser EXTENSION doesn't
+// have that limit (chrome.tabs.create isn't subject to the same popup
+// rule a webpage's script is), so the companion "Ticket Library — Open
+// All Tabs" extension is what actually makes a true one-click "open
+// everything" possible — this page just asks it, via postMessage, to do
+// the opening. Detected with a PING/READY handshake on load; if nothing
+// answers within a second, the extension isn't installed, and "Open
+// all" falls back to the direct-open-loop attempt (see
+// openAllRemainingInBulkQueue) instead.
+let extensionAvailable = false;
+window.addEventListener('message', event => {
+  if(event.source !== window) return;
+  const data = event.data;
+  if(!data || data.source !== 'ticket-library-opener-ext') return;
+  if(data.type === 'READY') extensionAvailable = true;
+  if(data.type === 'OPEN_TABS_DONE' && pendingExtensionOpenResolve){
+    pendingExtensionOpenResolve(data.openedCount);
+    pendingExtensionOpenResolve = null;
+  }
+});
+window.postMessage({ source: 'ticket-library', type: 'PING' }, '*');
+
+let pendingExtensionOpenResolve = null;
+function openTabsViaExtension(urls){
+  return new Promise(resolve => {
+    pendingExtensionOpenResolve = resolve;
+    window.postMessage({ source: 'ticket-library', type: 'OPEN_TABS', urls }, '*');
+  });
+}
+
 // A browser's popup blocker only ever guarantees ONE thing reliably:
 // window.open() called as the DIRECT, synchronous result of a genuine
 // click always works. A loop firing 20+ opens from that same click does
@@ -6789,22 +6823,27 @@ function openNextInBulkQueue(){
   bulkOpenQueue.index++;
   renderBulkOpenToast();
 }
-// Fires every remaining URL synchronously, all within this one click's
-// call stack, instead of one per click like openNextInBulkQueue above.
-// Whether this actually gets every tab through is entirely up to the
-// browser's own popup blocker — some allow a full burst like this from
-// a single genuine click, some silently cap it partway — there's no
-// reliable way for a page to detect which happened or how many
-// actually opened. That's fine here: bulkOpenQueue.index only advances
-// past what this function actually asked the browser to open, so
-// renderBulkOpenToast() afterward is always correct regardless of how
-// many the browser actually let through — anything still short shows
-// up as remaining, ready for "Open next" or another "Open all" attempt.
-function openAllRemainingInBulkQueue(){
+// Fires every remaining URL at once. When the companion extension is
+// installed (see the bridge above), this is genuinely reliable — it
+// hands the whole list to the extension and every tab actually opens.
+// Without it, this falls back to the direct-open-loop attempt, which
+// depends entirely on the browser's own popup blocker letting a full
+// burst through — some do, some silently cap it partway, with no way
+// for this page to tell which happened. Either way, bulkOpenQueue.index
+// only advances past what was actually asked to open, so
+// renderBulkOpenToast() afterward is always correct — anything still
+// short shows up as remaining, ready for "Open next" or another try.
+async function openAllRemainingInBulkQueue(){
   if(!bulkOpenQueue) return;
-  while(bulkOpenQueue.index < bulkOpenQueue.urls.length){
-    openUrlInBackground(bulkOpenQueue.urls[bulkOpenQueue.index]);
-    bulkOpenQueue.index++;
+  const remainingUrls = bulkOpenQueue.urls.slice(bulkOpenQueue.index);
+  if(extensionAvailable){
+    await openTabsViaExtension(remainingUrls);
+    bulkOpenQueue.index = bulkOpenQueue.urls.length;
+  } else {
+    while(bulkOpenQueue.index < bulkOpenQueue.urls.length){
+      openUrlInBackground(bulkOpenQueue.urls[bulkOpenQueue.index]);
+      bulkOpenQueue.index++;
+    }
   }
   renderBulkOpenToast();
 }
@@ -6833,14 +6872,26 @@ function renderBulkOpenToast(){
   const slowDownHint = /vivid/i.test(label)
     ? `<span class="bulk-open-toast-hint">If VividSeats shows a "Processing your request" page, that's their own bot-check reacting to a burst of opens — spacing "Open next" clicks out a few seconds usually avoids it.</span>`
     : '';
+  // The button's own label and tooltip are honest about which mode is
+  // actually active — "Open all" means something very different
+  // (guaranteed vs. a browser-dependent gamble) depending on whether the
+  // companion extension answered the PING/READY handshake.
+  const openAllLabel = extensionAvailable ? `⚡ Open all (${remaining})` : `⚡ Try open all (${remaining})`;
+  const openAllTitle = extensionAvailable
+    ? 'The companion extension is installed, so this reliably opens every remaining link in the background — no popup-blocker gamble.'
+    : "Fires every remaining link in one go, all from this one click — some browsers allow a whole burst like this through, some cap it partway and silently drop the rest with no way for this page to tell which happened. Install the companion \"Ticket Library — Open All Tabs\" extension for a reliable version of this instead of a gamble.";
+  const extensionHint = !extensionAvailable
+    ? `<span class="bulk-open-toast-hint">Want "Open all" to actually work every time? Install the companion extension (ask whoever set this app up for the file) — without it, this browser's own popup blocker decides how many actually get through.</span>`
+    : '';
   bulkOpenToast.innerHTML = `
     <span class="bulk-open-toast-text">Opened ${index} of ${urls.length} ${escapeHtml(label)} links</span>
     <button type="button" class="bulk-open-toast-btn primary" data-action="bulk-open-next">Open next (${remaining} left)</button>
-    <button type="button" class="bulk-open-toast-btn" data-action="bulk-open-all" title="Fires every remaining link in one go, all from this one click — some browsers allow a whole burst like this through, some cap it partway and silently drop the rest with no way for this page to tell which happened. Worth trying first; anything that didn't make it through still shows up here to open with the other options.">⚡ Open all (${remaining})</button>
+    <button type="button" class="bulk-open-toast-btn" data-action="bulk-open-all" title="${escapeHtml(openAllTitle)}">${openAllLabel}</button>
     <button type="button" class="bulk-open-toast-btn" data-action="bulk-open-download-bookmarks" title="Downloads a bookmarks file — import it into your browser, then right-click the folder and choose Open All. This actually opens everything at once, since it uses your browser's own bookmark feature instead of fighting its popup blocker.">⬇ Download as bookmarks</button>
     <button type="button" class="bulk-open-toast-btn" data-action="bulk-open-copy-next">Copy next link</button>
     <button type="button" class="bulk-open-toast-btn" data-action="bulk-open-dismiss">Done</button>
     ${slowDownHint}
+    ${extensionHint}
   `;
 }
 
