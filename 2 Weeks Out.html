@@ -501,6 +501,18 @@
     cursor:pointer;transition:border-color .15s ease,color .15s ease,background .15s ease;
   }
   .bulk-open-btn:hover{border-color:var(--teal);color:var(--teal);background:rgba(79,200,191,.06);}
+  /* Each platform's ↗ button is tinted to match its own link-button
+     color (see .link-btn.site-tm etc. below) — resting state just
+     hints at it (colored text/border, transparent fill) so a heading
+     full of these doesn't turn into a wall of solid color; hover fills
+     in the same color, same "about to act" signal every other button
+     in this app gives on hover. */
+  .bulk-open-btn[data-platform="site-tm"]{border-color:rgba(10,92,255,.35);color:var(--tm-blue);}
+  .bulk-open-btn[data-platform="site-tm"]:hover{border-color:var(--tm-blue);color:var(--tm-blue);background:rgba(10,92,255,.12);}
+  .bulk-open-btn[data-platform="site-vivid"]{border-color:rgba(255,61,129,.35);color:var(--vivid-pink);}
+  .bulk-open-btn[data-platform="site-vivid"]:hover{border-color:var(--vivid-pink);color:var(--vivid-pink);background:rgba(255,61,129,.12);}
+  .bulk-open-btn[data-platform="site-stub"]{border-color:rgba(255,122,26,.35);color:var(--stub-orange);}
+  .bulk-open-btn[data-platform="site-stub"]:hover{border-color:var(--stub-orange);color:var(--stub-orange);background:rgba(255,122,26,.12);}
   /* Fixed to the viewport, not the scrolling <main> — bottom-right,
      clear of the bulk-open toast (which is centered) so both can be
      visible at once without overlapping. */
@@ -2236,6 +2248,18 @@ addShowPasteToggle.addEventListener('click', () => {
 function parsePastedEventDetails(text){
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   if(!lines.length) return null;
+  // The companion extension's "Send to Ticket Library" button (on a
+  // Ticketmaster page) copies the URL as its first line, ahead of the
+  // name/date/venue — if that's what's here, peel it off as the link
+  // and parse everything else exactly as before. A person manually
+  // copying just the visible name/date/venue text (no button involved)
+  // won't have a URL line at all, so this only ever adds a capability,
+  // never changes the existing behavior.
+  let urlHint = null;
+  if(/^https?:\/\//i.test(lines[0])){
+    urlHint = lines.shift();
+  }
+  if(!lines.length) return urlHint ? { urlHint, nameHint: null, dateStr: null, venueHint: null } : null;
   // A date line reliably has a month name near some digits — this is
   // deliberately loose (doesn't require a year or a time) since the
   // goal is just to find WHICH line is the date, not to parse it here;
@@ -2269,14 +2293,18 @@ function parsePastedEventDetails(text){
     // whatever the source site happened to use.
     dateStr = parsed ? parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : dateLine;
   }
-  if(!nameHint && !dateStr && !venueHint) return null;
-  return { nameHint, dateStr, venueHint };
+  if(!urlHint && !nameHint && !dateStr && !venueHint) return null;
+  return { urlHint, nameHint, dateStr, venueHint };
 }
 addShowPasteInput.addEventListener('input', () => {
   const hint = parsePastedEventDetails(addShowPasteInput.value);
   if(!hint) return;
   // Same "offered once, never fights a manual edit" rule as the link
   // slug hint below.
+  if(hint.urlHint && !addShowLinkInput.value.trim()){
+    addShowLinkInput.value = hint.urlHint;
+    addShowLinkInput.dispatchEvent(new Event('input', { bubbles: true })); // let the slug-hint check run too
+  }
   if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
   if(hint.venueHint && !addShowVenueInput.value.trim()) addShowVenueInput.value = hint.venueHint;
   if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
@@ -6769,6 +6797,21 @@ window.addEventListener('message', event => {
   if(data.type === 'OPEN_TABS_DONE' && pendingExtensionOpenResolve){
     pendingExtensionOpenResolve(data.openedCount);
     pendingExtensionOpenResolve = null;
+  }
+  // An event scraped from an actual Ticketmaster page (see the
+  // extension's ticketmaster-content.js) landing here — same
+  // "starting point offered once, never fights a manual edit" rule as
+  // every other auto-fill in this modal. Opens Add Show if it wasn't
+  // already, so this works whether the person had the tab sitting open
+  // or not.
+  if(data.type === 'FILL_ADD_SHOW' && data.event){
+    if(addShowModal.style.display !== 'flex') openAddShowModal();
+    const ev = data.event;
+    if(ev.url && !addShowLinkInput.value.trim()) addShowLinkInput.value = ev.url;
+    if(ev.name && !addShowNameInput.value.trim()) addShowNameInput.value = ev.name;
+    if(ev.venue && !addShowVenueInput.value.trim()) addShowVenueInput.value = ev.venue;
+    if(ev.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = ev.dateStr;
+    addShowLinkInput.dispatchEvent(new Event('input', { bubbles: true })); // triggers the slug-hint check too, harmless if it finds nothing new
   }
 });
 window.postMessage({ source: 'ticket-library', type: 'PING' }, '*');
