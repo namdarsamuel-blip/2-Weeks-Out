@@ -2436,8 +2436,7 @@ addShowPasteInput.addEventListener('input', () => {
   // Same "offered once, never fights a manual edit" rule as the link
   // slug hint below.
   if(hint.urlHint && !addShowLinkInput.value.trim()){
-    addShowLinkInput.value = hint.urlHint;
-    addShowLinkEditedAt = Date.now(); // a real, deliberate fill — not the stale-autofill the poll below is watching for
+    setAddShowLink(hint.urlHint);
     addShowLinkInput.dispatchEvent(new Event('input', { bubbles: true })); // let the slug-hint check run too
   }
   if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
@@ -2452,7 +2451,7 @@ function openAddShowModal(){
     alert("Only Sam can add shows to US Open — everyone can still edit what's already there (notes, star, pin, prices).");
     return;
   }
-  addShowLinkInput.value = '';
+  setAddShowLink('');
   addShowNameInput.value = '';
   addShowVenueInput.value = '';
   addShowDateInput.value = '';
@@ -2465,34 +2464,48 @@ function openAddShowModal(){
   updateAddShowPreview();
   addShowModal.style.display = 'flex';
   addShowLinkInput.focus();
-  // Same stale-value problem the search box had (see
-  // searchInputUserEditedAt/clearStaleSearchValue far below): a browser
-  // can restore or autofill a previously-typed value into a plain text
-  // field shortly AFTER a script clears it, so one clear on open isn't
-  // always enough — this field's placeholder and label read enough like
-  // a URL field that it's a plausible autofill target. Tracked by
-  // TIMING (last real keydown/paste, or the app's own deliberate fills —
-  // see addShowLinkEditedAt = Date.now() at every legitimate autofill
-  // site), not by comparing values — autofill often dispatches its own
-  // synthetic 'input' event too, so checking "does the value match what
-  // I last saw" would just treat an autofilled value as if the person
-  // had typed it themselves. The threshold is generous on purpose: the
-  // only time addShowLinkEditedAt is stale is when NOTHING legitimate
-  // has touched this field recently, which is exactly the case that
-  // should get cleared — a real edit (typed, pasted, or one of this
-  // app's own auto-fills) always re-marks it fresh, so a wide window
-  // here only ever risks being too lenient toward genuine autofill
-  // landing very late, never too eager against something real.
+  // Same stale-value problem the search box had — a browser can restore
+  // or autofill a previously-typed value into a plain text field
+  // shortly AFTER a script clears it, so one clear on open isn't always
+  // enough. This used to be timing-based (clear anything not "recently
+  // edited"), which had a real bug: a value set ONCE and correctly left
+  // alone afterward — exactly what a legitimate fill from the companion
+  // extension looks like — would cross that "recent" window and get
+  // wiped out anyway, several seconds after it was set. That's why a
+  // link would visibly appear from the extension and then vanish a
+  // moment later. Tracking a TRUSTED value instead (see setAddShowLink
+  // and the keydown/paste listeners below) fixes that: the poll only
+  // clears the field when its current value doesn't match anything we
+  // actually put there through a path we trust, with no expiry — a
+  // trusted value stays trusted no matter how long it sits untouched.
   let checks = 0;
   const interval = setInterval(() => {
     checks++;
     if(checks > 15 || addShowModal.style.display !== 'flex'){ clearInterval(interval); return; }
-    if(addShowLinkInput.value && Date.now() - addShowLinkEditedAt > 3000) addShowLinkInput.value = '';
+    if(addShowLinkInput.value && addShowLinkInput.value !== addShowLinkTrustedValue) addShowLinkInput.value = '';
   }, 300);
 }
-let addShowLinkEditedAt = 0;
-addShowLinkInput.addEventListener('keydown', () => { addShowLinkEditedAt = Date.now(); });
-addShowLinkInput.addEventListener('paste', () => { addShowLinkEditedAt = Date.now(); });
+// The one thing every legitimate code path that fills this field in —
+// FILL_ADD_SHOW's direct relay, the multi-line clipboard paste, the
+// separate "paste event details" box's urlHint — routes through, so the
+// stale-value poll above has one single, reliable way to tell "a value
+// we actually put here" apart from "something else changed this
+// without us knowing" (autofill, browser restore) — a value here is
+// either recognized or it isn't; there's no decaying time window for it
+// to fall out of.
+let addShowLinkTrustedValue = '';
+function setAddShowLink(value){
+  addShowLinkInput.value = value;
+  addShowLinkTrustedValue = value;
+}
+// A real keystroke or a real (default, non-intercepted) paste is
+// trustworthy too — after the browser actually applies it, whatever the
+// field now holds becomes the new trusted value. The 0ms setTimeout
+// matters: at the moment 'keydown'/'paste' fires, the browser hasn't
+// updated .value yet, so reading it immediately would just re-trust the
+// OLD value.
+addShowLinkInput.addEventListener('keydown', () => { setTimeout(() => { addShowLinkTrustedValue = addShowLinkInput.value; }, 0); });
+addShowLinkInput.addEventListener('paste', () => { setTimeout(() => { addShowLinkTrustedValue = addShowLinkInput.value; }, 0); });
 function closeAddShowModal(){ addShowModal.style.display = 'none'; }
 addShowBtn.addEventListener('click', openAddShowModal);
 closeAddShowBtn.addEventListener('click', closeAddShowModal);
@@ -2526,7 +2539,7 @@ addShowLinkInput.addEventListener('paste', e => {
   if(!pasted || !pasted.includes('\n')) return; // just a URL — let it paste normally
   e.preventDefault();
   const hint = parsePastedEventDetails(pasted);
-  addShowLinkInput.value = (hint && hint.urlHint) ? hint.urlHint : pasted.split('\n')[0].trim();
+  setAddShowLink((hint && hint.urlHint) ? hint.urlHint : pasted.split('\n')[0].trim());
   if(hint){
     if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
     if(hint.venueHint && !addShowVenueInput.value.trim()) addShowVenueInput.value = hint.venueHint;
@@ -7099,10 +7112,7 @@ window.addEventListener('message', event => {
   if(data.type === 'FILL_ADD_SHOW' && data.event){
     if(addShowModal.style.display !== 'flex') openAddShowModal();
     const ev = data.event;
-    if(ev.url && !addShowLinkInput.value.trim()){
-      addShowLinkInput.value = ev.url;
-      addShowLinkEditedAt = Date.now(); // a real, deliberate fill — not the stale-autofill the poll in openAddShowModal is watching for
-    }
+    if(ev.url && !addShowLinkInput.value.trim()) setAddShowLink(ev.url);
     if(ev.name && !addShowNameInput.value.trim()) addShowNameInput.value = ev.name;
     if(ev.venue && !addShowVenueInput.value.trim()) addShowVenueInput.value = ev.venue;
     if(ev.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = ev.dateStr;
