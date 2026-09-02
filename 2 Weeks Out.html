@@ -501,6 +501,13 @@
     cursor:pointer;transition:border-color .15s ease,color .15s ease,background .15s ease;
   }
   .bulk-open-btn:hover{border-color:var(--teal);color:var(--teal);background:rgba(79,200,191,.06);}
+  /* Resting state stays neutral/muted (same as every other button) —
+     only on hover does each one pick up its own platform's color
+     (matching .link-btn.site-tm etc. below), as the "about to act"
+     signal instead of the generic teal every other button uses. */
+  .bulk-open-btn[data-platform="site-tm"]:hover{border-color:var(--tm-blue);color:var(--tm-blue);background:rgba(10,92,255,.1);}
+  .bulk-open-btn[data-platform="site-vivid"]:hover{border-color:var(--vivid-pink);color:var(--vivid-pink);background:rgba(255,61,129,.1);}
+  .bulk-open-btn[data-platform="site-stub"]:hover{border-color:var(--stub-orange);color:var(--stub-orange);background:rgba(255,122,26,.1);}
   /* Fixed to the viewport, not the scrolling <main> — bottom-right,
      clear of the bulk-open toast (which is centered) so both can be
      visible at once without overlapping. */
@@ -1260,16 +1267,11 @@
   .long-text-prompt-hint{font-size:11px;color:var(--muted);margin:-8px 0 0;}
   .add-show-field{margin-bottom:12px;}
   .add-show-label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;}
+  .add-show-label-optional{text-transform:none;letter-spacing:normal;opacity:.7;}
   .add-show-hint{
     font-size:11.5px;color:var(--teal);background:rgba(79,200,191,.08);
     border:1px solid rgba(79,200,191,.3);border-radius:7px;padding:8px 10px;margin-bottom:12px;
   }
-  .add-show-paste-toggle{
-    display:block;width:100%;text-align:left;background:none;border:none;
-    font-family:'Inter',sans-serif;font-size:12px;color:var(--teal);cursor:pointer;
-    padding:2px 0 14px;
-  }
-  .add-show-paste-toggle:hover{text-decoration:underline;}
   .add-show-paste-input{resize:vertical;font-family:'Inter',sans-serif;line-height:1.5;}
   .add-show-paste-note{font-size:11px;color:var(--muted);margin:5px 0 0;}
   .add-show-submit-btn{
@@ -1866,13 +1868,12 @@
       <p class="modal-desc-text" style="margin-bottom:14px;">Paste a Ticketmaster link first — if the URL has the show's name and date built into it, this fills those in for you. Works best on links like <span style="font-family:'IBM Plex Mono',monospace;">ticketmaster.com/artist-name-tour-city-state-12-22-2026/event/...</span>; a bare event-ID link (no readable text in it) won't have anything to pull out, so you'll fill those in by hand.</p>
       <div class="add-show-field">
         <label class="add-show-label">Ticket link</label>
-        <input type="text" autocomplete="off" class="modal-text-input" id="addShowLinkInput" placeholder="Paste a Ticketmaster/VividSeats/StubHub link">
+        <input type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" name="ticketlibrary-addshow-link-nofill" class="modal-text-input" id="addShowLinkInput" placeholder="Paste a Ticketmaster/VividSeats/StubHub link">
       </div>
-      <button type="button" class="add-show-paste-toggle" id="addShowPasteToggle">📋 Or paste the event details from the page instead of typing them</button>
-      <div class="add-show-field" id="addShowPasteWrap" style="display:none;">
-        <label class="add-show-label">Pasted event details</label>
+      <div class="add-show-field">
+        <label class="add-show-label">Pasted event details <span class="add-show-label-optional">(optional)</span></label>
         <textarea autocomplete="off" class="modal-text-input add-show-paste-input" id="addShowPasteInput" rows="3" placeholder="Select and copy the event name, date, and venue right off the ticket page, then paste the whole block here — e.g.:&#10;Herb Alpert &amp; The Tijuana Brass&#10;Fri, Sep 18, 2026, 8:00 PM&#10;Michigan Theater, Ann Arbor, MI"></textarea>
-        <p class="add-show-paste-note">This only reads text you copy and paste in yourself — nothing is fetched from the ticket site (their event pages block that kind of automated request).</p>
+        <p class="add-show-paste-note">This only reads text you copy and paste in yourself — nothing is fetched from the ticket site (their event pages block that kind of automated request). Pasting into the Ticket link field above works too, if what's copied already starts with the link.</p>
       </div>
       <div class="add-show-field">
         <label class="add-show-label">Show name</label>
@@ -2213,15 +2214,7 @@ const addShowVenueInput = $('#addShowVenueInput');
 const addShowDateInput = $('#addShowDateInput');
 const addShowSlugHint = $('#addShowSlugHint');
 const addShowSubmitBtn = $('#addShowSubmitBtn');
-const addShowPasteToggle = $('#addShowPasteToggle');
-const addShowPasteWrap = $('#addShowPasteWrap');
 const addShowPasteInput = $('#addShowPasteInput');
-
-addShowPasteToggle.addEventListener('click', () => {
-  const showing = addShowPasteWrap.style.display !== 'none';
-  addShowPasteWrap.style.display = showing ? 'none' : 'block';
-  if(!showing) addShowPasteInput.focus();
-});
 
 // The legitimate middle ground for a bare event-ID link, which has
 // nothing in the URL itself to parse (see parseTicketmasterSlugHint's
@@ -2308,11 +2301,29 @@ function openAddShowModal(){
   addShowVenueInput.value = '';
   addShowDateInput.value = '';
   addShowPasteInput.value = '';
-  addShowPasteWrap.style.display = 'none';
   addShowSlugHint.style.display = 'none';
   addShowModal.style.display = 'flex';
   addShowLinkInput.focus();
+  // Same stale-value problem the search box had (see
+  // searchInputUserEditedAt/clearStaleSearchValue far below): a browser
+  // can restore or autofill a previously-typed value into a plain text
+  // field shortly AFTER a script clears it, so one clear on open isn't
+  // always enough — this field's placeholder and label read enough like
+  // a URL field that it's a plausible autofill target. Tracked by
+  // TIMING (last real keydown/paste), not by comparing values — autofill
+  // often dispatches its own synthetic 'input' event too, so checking
+  // "does the value match what I last saw" would just treat an
+  // autofilled value as if the person had typed it themselves.
+  let checks = 0;
+  const interval = setInterval(() => {
+    checks++;
+    if(checks > 10 || addShowModal.style.display !== 'flex'){ clearInterval(interval); return; }
+    if(addShowLinkInput.value && Date.now() - addShowLinkEditedAt > 1000) addShowLinkInput.value = '';
+  }, 200);
 }
+let addShowLinkEditedAt = 0;
+addShowLinkInput.addEventListener('keydown', () => { addShowLinkEditedAt = Date.now(); });
+addShowLinkInput.addEventListener('paste', () => { addShowLinkEditedAt = Date.now(); });
 function closeAddShowModal(){ addShowModal.style.display = 'none'; }
 addShowBtn.addEventListener('click', openAddShowModal);
 closeAddShowBtn.addEventListener('click', closeAddShowModal);
