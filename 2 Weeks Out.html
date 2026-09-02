@@ -1274,6 +1274,26 @@
   }
   .add-show-paste-input{resize:vertical;font-family:'Inter',sans-serif;line-height:1.5;}
   .add-show-paste-note{font-size:11px;color:var(--muted);margin:5px 0 0;}
+  /* The whole point of this preview is to make "paste link, see the
+     show, hit add" feel like the actual flow instead of "fill out five
+     fields" — styled like the real ticket card it's about to become
+     (see .ticket elsewhere) so what shows up here is a genuine preview,
+     not just a form summary in different type. */
+  .add-show-preview{margin:14px 0;}
+  .add-show-preview-empty{font-size:12.5px;color:var(--muted);font-style:italic;margin:0;}
+  .add-show-preview-card{
+    background:var(--bg);border:1px solid var(--hairline);border-left:3px solid var(--amber);
+    border-radius:8px;padding:12px 14px;
+  }
+  .add-show-preview-date{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--amber);margin-bottom:4px;}
+  .add-show-preview-name{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:.02em;color:var(--teal);line-height:1.2;}
+  .add-show-preview-venue{font-size:12.5px;color:var(--muted);margin-top:2px;}
+  .add-show-edit-toggle{
+    display:block;width:100%;text-align:left;background:none;border:none;
+    font-family:'Inter',sans-serif;font-size:12px;color:var(--muted);cursor:pointer;
+    padding:8px 0 4px;
+  }
+  .add-show-edit-toggle:hover{color:var(--text);text-decoration:underline;}
   .add-show-submit-btn{
     width:100%;font-family:'Inter',sans-serif;font-size:13.5px;font-weight:700;
     padding:11px;border-radius:8px;border:none;background:var(--teal);color:#0d1a19;
@@ -1865,30 +1885,44 @@
       <button type="button" class="insights-close-btn" id="closeAddShowBtn" aria-label="Close">×</button>
     </div>
     <div class="insights-modal-body">
-      <p class="modal-desc-text" style="margin-bottom:14px;">Paste a Ticketmaster link first — if the URL has the show's name and date built into it, this fills those in for you. Works best on links like <span style="font-family:'IBM Plex Mono',monospace;">ticketmaster.com/artist-name-tour-city-state-12-22-2026/event/...</span>; a bare event-ID link (no readable text in it) won't have anything to pull out, so you'll fill those in by hand.</p>
+      <p class="modal-desc-text" style="margin-bottom:14px;">Paste a ticket link — a descriptive Ticketmaster URL, or the whole block copied from the companion extension's "Send to Ticket Library" button, fills in the rest below on its own.</p>
       <div class="add-show-field">
         <label class="add-show-label">Ticket link</label>
         <input type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" name="ticketlibrary-addshow-link-nofill" class="modal-text-input" id="addShowLinkInput" placeholder="Paste a Ticketmaster/VividSeats/StubHub link">
       </div>
-      <div class="add-show-field">
-        <label class="add-show-label">Pasted event details <span class="add-show-label-optional">(optional)</span></label>
-        <textarea autocomplete="off" class="modal-text-input add-show-paste-input" id="addShowPasteInput" rows="3" placeholder="Select and copy the event name, date, and venue right off the ticket page, then paste the whole block here — e.g.:&#10;Herb Alpert &amp; The Tijuana Brass&#10;Fri, Sep 18, 2026, 8:00 PM&#10;Michigan Theater, Ann Arbor, MI"></textarea>
-        <p class="add-show-paste-note">This only reads text you copy and paste in yourself — nothing is fetched from the ticket site (their event pages block that kind of automated request). Pasting into the Ticket link field above works too, if what's copied already starts with the link.</p>
-      </div>
-      <div class="add-show-field">
-        <label class="add-show-label">Show name</label>
-        <input type="text" autocomplete="off" class="modal-text-input" id="addShowNameInput" placeholder="e.g. Jonas Brothers">
-      </div>
-      <div class="add-show-field">
-        <label class="add-show-label">Venue</label>
-        <input type="text" autocomplete="off" class="modal-text-input" id="addShowVenueInput" placeholder="e.g. Prudential Center, Newark, NJ">
-      </div>
-      <div class="add-show-field">
-        <label class="add-show-label">Date</label>
-        <input type="text" autocomplete="off" class="modal-text-input" id="addShowDateInput" placeholder="e.g. Dec 22, 2026 or 12/22/2026">
-      </div>
       <div class="add-show-hint" id="addShowSlugHint" style="display:none;"></div>
-      <button type="button" class="add-show-submit-btn" id="addShowSubmitBtn">+ Add to this sheet</button>
+
+      <div class="add-show-preview" id="addShowPreview">
+        <p class="add-show-preview-empty" id="addShowPreviewEmpty">Nothing to preview yet — paste a link above.</p>
+        <div class="add-show-preview-card" id="addShowPreviewCard" style="display:none;">
+          <div class="add-show-preview-date" id="addShowPreviewDate"></div>
+          <div class="add-show-preview-name" id="addShowPreviewName"></div>
+          <div class="add-show-preview-venue" id="addShowPreviewVenue"></div>
+        </div>
+      </div>
+      <button type="button" class="add-show-edit-toggle" id="addShowEditToggle">✏️ Edit details manually</button>
+
+      <div id="addShowManualWrap" style="display:none;">
+        <div class="add-show-field">
+          <label class="add-show-label">Show name</label>
+          <input type="text" autocomplete="off" class="modal-text-input" id="addShowNameInput" placeholder="e.g. Jonas Brothers">
+        </div>
+        <div class="add-show-field">
+          <label class="add-show-label">Venue</label>
+          <input type="text" autocomplete="off" class="modal-text-input" id="addShowVenueInput" placeholder="e.g. Prudential Center, Newark, NJ">
+        </div>
+        <div class="add-show-field">
+          <label class="add-show-label">Date</label>
+          <input type="text" autocomplete="off" class="modal-text-input" id="addShowDateInput" placeholder="e.g. Dec 22, 2026 or 12/22/2026">
+        </div>
+        <div class="add-show-field">
+          <label class="add-show-label">Pasted event details <span class="add-show-label-optional">(optional)</span></label>
+          <textarea autocomplete="off" class="modal-text-input add-show-paste-input" id="addShowPasteInput" rows="3" placeholder="Select and copy the event name, date, and venue right off the ticket page, then paste the whole block here — e.g.:&#10;Herb Alpert &amp; The Tijuana Brass&#10;Fri, Sep 18, 2026, 8:00 PM&#10;Michigan Theater, Ann Arbor, MI"></textarea>
+          <p class="add-show-paste-note">This only reads text you copy and paste in yourself — nothing is fetched from the ticket site (their event pages block that kind of automated request).</p>
+        </div>
+      </div>
+
+      <button type="button" class="add-show-submit-btn" id="addShowSubmitBtn">+ Add show</button>
     </div>
   </div>
 </div>
@@ -2215,6 +2249,47 @@ const addShowDateInput = $('#addShowDateInput');
 const addShowSlugHint = $('#addShowSlugHint');
 const addShowSubmitBtn = $('#addShowSubmitBtn');
 const addShowPasteInput = $('#addShowPasteInput');
+const addShowPreviewEmpty = $('#addShowPreviewEmpty');
+const addShowPreviewCard = $('#addShowPreviewCard');
+const addShowPreviewDate = $('#addShowPreviewDate');
+const addShowPreviewName = $('#addShowPreviewName');
+const addShowPreviewVenue = $('#addShowPreviewVenue');
+const addShowEditToggle = $('#addShowEditToggle');
+const addShowManualWrap = $('#addShowManualWrap');
+
+// The whole "paste link, see it, hit add" flow hinges on this — every
+// auto-fill path (slug parsing, pasted-details parsing, the companion
+// extension's direct relay) and every manual edit all funnel through
+// here, so the preview is always an honest reflection of what Add show
+// would actually create, not just of the one field that most recently
+// changed.
+function updateAddShowPreview(){
+  const name = addShowNameInput.value.trim();
+  const venue = addShowVenueInput.value.trim();
+  const dateStr = addShowDateInput.value.trim();
+  if(!name && !venue && !dateStr){
+    addShowPreviewEmpty.style.display = 'block';
+    addShowPreviewCard.style.display = 'none';
+    return;
+  }
+  addShowPreviewEmpty.style.display = 'none';
+  addShowPreviewCard.style.display = 'block';
+  addShowPreviewName.textContent = name || '(no name yet)';
+  addShowPreviewVenue.textContent = venue || '(no venue yet)';
+  const parsedDate = dateStr ? parseEventDate(dateStr) : null;
+  addShowPreviewDate.textContent = parsedDate
+    ? parsedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + parsedDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : (dateStr || '(no date yet)');
+}
+[addShowNameInput, addShowVenueInput, addShowDateInput].forEach(input => {
+  input.addEventListener('input', updateAddShowPreview);
+});
+addShowEditToggle.addEventListener('click', () => {
+  const showing = addShowManualWrap.style.display !== 'none';
+  addShowManualWrap.style.display = showing ? 'none' : 'block';
+  addShowEditToggle.textContent = showing ? '✏️ Edit details manually' : '✏️ Hide manual details';
+  if(!showing) addShowNameInput.focus();
+});
 
 // The legitimate middle ground for a bare event-ID link, which has
 // nothing in the URL itself to parse (see parseTicketmasterSlugHint's
@@ -2289,6 +2364,7 @@ addShowPasteInput.addEventListener('input', () => {
   if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
   if(hint.venueHint && !addShowVenueInput.value.trim()) addShowVenueInput.value = hint.venueHint;
   if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
+  updateAddShowPreview();
 });
 
 function openAddShowModal(){
@@ -2302,6 +2378,9 @@ function openAddShowModal(){
   addShowDateInput.value = '';
   addShowPasteInput.value = '';
   addShowSlugHint.style.display = 'none';
+  addShowManualWrap.style.display = 'none';
+  addShowEditToggle.textContent = '✏️ Edit details manually';
+  updateAddShowPreview();
   addShowModal.style.display = 'flex';
   addShowLinkInput.focus();
   // Same stale-value problem the search box had (see
@@ -2341,6 +2420,7 @@ addShowLinkInput.addEventListener('input', () => {
   if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
   addShowSlugHint.style.display = 'block';
   addShowSlugHint.textContent = `Pulled from the link: ${[hint.nameHint, hint.dateStr].filter(Boolean).join(' · ')} — the name is a raw guess from the URL text, so it's worth splitting the venue out of it and double-checking the date.`;
+  updateAddShowPreview();
 });
 // A single paste into this field is now enough on its own — if what
 // lands in the clipboard is more than just a bare URL (the companion
@@ -2365,6 +2445,22 @@ addShowLinkInput.addEventListener('paste', e => {
   // Still worth a pass through the slug parser too — a descriptive URL
   // pasted this way should get the same treatment as one pasted plain.
   addShowLinkInput.dispatchEvent(new Event('input', { bubbles: true }));
+  updateAddShowPreview();
+});
+// Whatever kind of paste just happened (plain URL or the full block),
+// if nothing actually managed to fill in a name, silently leaving the
+// preview stuck on "Nothing to preview yet" with no obvious next step
+// would be worse than just showing the manual fields — so this reveals
+// them automatically in exactly that one case, and leaves them alone
+// otherwise (never auto-collapses something the person already opened
+// or filled in).
+addShowLinkInput.addEventListener('paste', () => {
+  setTimeout(() => {
+    if(!addShowNameInput.value.trim() && addShowManualWrap.style.display === 'none'){
+      addShowManualWrap.style.display = 'block';
+      addShowEditToggle.textContent = '✏️ Hide manual details';
+    }
+  }, 50);
 });
 
 addShowSubmitBtn.addEventListener('click', async () => {
@@ -6835,6 +6931,7 @@ window.addEventListener('message', event => {
     if(ev.venue && !addShowVenueInput.value.trim()) addShowVenueInput.value = ev.venue;
     if(ev.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = ev.dateStr;
     addShowLinkInput.dispatchEvent(new Event('input', { bubbles: true })); // triggers the slug-hint check too, harmless if it finds nothing new
+    updateAddShowPreview();
   }
 });
 window.postMessage({ source: 'ticket-library', type: 'PING' }, '*');
