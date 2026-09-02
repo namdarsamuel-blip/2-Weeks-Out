@@ -1288,12 +1288,29 @@
   .add-show-preview-date{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--amber);margin-bottom:4px;}
   .add-show-preview-name{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:.02em;color:var(--teal);line-height:1.2;}
   .add-show-preview-venue{font-size:12.5px;color:var(--muted);margin-top:2px;}
+  .add-show-preview-vivid{font-size:11.5px;color:var(--vivid-pink);margin-top:8px;font-weight:600;}
   .add-show-edit-toggle{
     display:block;width:100%;text-align:left;background:none;border:none;
     font-family:'Inter',sans-serif;font-size:12px;color:var(--muted);cursor:pointer;
     padding:8px 0 4px;
   }
   .add-show-edit-toggle:hover{color:var(--text);text-decoration:underline;}
+  /* The compact "view in History" link that replaced the old always-
+     expanded inline list — deliberately understated (muted color, plain
+     text, no card/border) so it reads as a minor aside, not something
+     competing with the actual search results above it. */
+  .history-view-link{
+    display:block;width:100%;text-align:left;background:none;border:none;
+    font-family:'Inter',sans-serif;font-size:12.5px;color:var(--muted);cursor:pointer;
+    padding:14px 20px;border-top:1px solid var(--hairline);margin-top:8px;
+  }
+  .history-view-link:hover{color:var(--amber);}
+  .history-view-back-btn{
+    display:inline-flex;align-items:center;gap:5px;margin:16px 0 4px 20px;
+    font-family:'Inter',sans-serif;font-size:12.5px;font-weight:600;color:var(--muted);
+    background:none;border:none;cursor:pointer;padding:4px 0;
+  }
+  .history-view-back-btn:hover{color:var(--text);}
   .add-show-error{
     font-size:12.5px;color:var(--coral);background:rgba(255,107,106,.08);
     border:1px solid rgba(255,107,106,.3);border-radius:7px;padding:8px 10px;margin:0 0 12px;
@@ -1767,6 +1784,7 @@
       <button class="btn ghost account-menu-trigger" id="adminModeBtn" title="Log in — pick your name and enter your passcode, or create a new account. Everyday edits (notes, star, pin, codes, prices) never require logging in; it's only for your own private sheets and a few admin-only actions.">👤 Log in</button>
       <div class="account-menu" id="accountMenu" style="display:none;">
         <button type="button" class="account-menu-item" id="accountMenuArchived">📦 Archived</button>
+        <button type="button" class="account-menu-item" id="accountMenuHistory">📜 History</button>
         <button type="button" class="account-menu-item account-menu-logout" id="accountMenuLogout">🚪 Log out</button>
       </div>
     </div>
@@ -1902,6 +1920,7 @@
           <div class="add-show-preview-date" id="addShowPreviewDate"></div>
           <div class="add-show-preview-name" id="addShowPreviewName"></div>
           <div class="add-show-preview-venue" id="addShowPreviewVenue"></div>
+          <div class="add-show-preview-vivid" id="addShowPreviewVivid" style="display:none;">🩷 VividSeats link found too</div>
         </div>
       </div>
       <button type="button" class="add-show-edit-toggle" id="addShowEditToggle">✏️ Edit details manually</button>
@@ -2127,6 +2146,11 @@ accountMenuArchived.addEventListener('click', () => {
   updateDeleteAllArchivedBtnVisibility();
   render();
 });
+const accountMenuHistory = $('#accountMenuHistory');
+accountMenuHistory.addEventListener('click', () => {
+  accountMenu.style.display = 'none';
+  openHistoryView(''); // unfiltered — every history item, not scoped to one tour
+});
 // Click-outside and Escape both close the menu — standard popover
 // behavior, and without it the only way to dismiss it would be to
 // actually pick one of the two options.
@@ -2259,8 +2283,15 @@ const addShowPreviewCard = $('#addShowPreviewCard');
 const addShowPreviewDate = $('#addShowPreviewDate');
 const addShowPreviewName = $('#addShowPreviewName');
 const addShowPreviewVenue = $('#addShowPreviewVenue');
+const addShowPreviewVivid = $('#addShowPreviewVivid');
 const addShowEditToggle = $('#addShowEditToggle');
 const addShowManualWrap = $('#addShowManualWrap');
+// No visible field for this — it only ever arrives already paired with
+// the main ticket link (the companion extension's cross-tab matching,
+// or a "VividSeats: <url>" line in a pasted block), so there's nothing
+// for a person to type in here themselves. Cleared on every modal open,
+// carried into the submitted event alongside everything else.
+let addShowVividLink = '';
 
 // The whole "paste link, see it, hit add" flow hinges on this — every
 // auto-fill path (slug parsing, pasted-details parsing, the companion
@@ -2281,6 +2312,7 @@ function updateAddShowPreview(){
   addShowPreviewCard.style.display = 'block';
   addShowPreviewName.textContent = name || '(no name yet)';
   addShowPreviewVenue.textContent = venue || '(no venue yet)';
+  addShowPreviewVivid.style.display = addShowVividLink ? 'block' : 'none';
   const parsedDate = dateStr ? parseEventDate(dateStr) : null;
   addShowPreviewDate.textContent = parsedDate
     ? parsedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + parsedDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -2321,15 +2353,22 @@ function parsePastedEventDetails(text){
   // line — prefer one whose path reads like an actual event page
   // (/event/) over any other link along for the ride (a venue's own
   // page, "more info", etc.); fall back to whichever URL came first if
-  // none look like that.
-  const urlMatches = Array.from(text.matchAll(/https?:\/\/[^\s)]+/g)).map(m => m[0]);
+  // none look like that. A "VividSeats: <url>" line — what the
+  // companion extension's clipboard fallback writes when it found a
+  // matching VividSeats tab — is captured separately as its own hint
+  // rather than competing for the same urlHint slot, and stripped out
+  // as a whole line before the rest of this even looks at it.
+  const vividLineMatch = text.match(/vividseats\s*:\s*(https?:\/\/\S+)/i);
+  const vividHint = vividLineMatch ? vividLineMatch[1] : null;
+  const textWithoutVividLine = vividLineMatch ? text.replace(vividLineMatch[0], '') : text;
+  const urlMatches = Array.from(textWithoutVividLine.matchAll(/https?:\/\/[^\s)]+/g)).map(m => m[0]);
   const urlHint = urlMatches.find(u => /\/event\//i.test(u)) || urlMatches[0] || null;
 
   // 2) Markdown-style links reduce to just their visible text — a
   // venue wrapped as [Crypto.com Arena, Los Angeles, CA](url) should
   // read as plain venue text, not link syntax; its URL was already
   // captured above (or discarded) by the pass that just ran.
-  let cleaned = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  let cleaned = textWithoutVividLine.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
   // Any URL still sitting bare in the text (on its own line, not part
   // of a markdown link) gets removed entirely now that it's been
   // captured as urlHint — left in place, a lone URL line has no name-
@@ -2353,7 +2392,7 @@ function parsePastedEventDetails(text){
   // entirely rather than getting glued onto the name or venue guess.
   const noiseLines = new Set(['more info', 'get tickets', 'buy tickets', 'tickets', 'resale tickets', 'view tickets', 'accessible tickets', 'i more info']);
   const lines = cleaned.split('\n').map(l => l.trim()).filter(l => l && !noiseLines.has(l.toLowerCase()));
-  if(!lines.length) return urlHint ? { urlHint, nameHint: null, dateStr: null, venueHint: null } : null;
+  if(!lines.length) return (urlHint || vividHint) ? { urlHint, nameHint: null, dateStr: null, venueHint: null, vividHint } : null;
 
   // A date line reliably has a month name near some digits — this is
   // deliberately loose (doesn't require a year or a time) since the
@@ -2388,8 +2427,8 @@ function parsePastedEventDetails(text){
     // whatever the source site happened to use.
     dateStr = parsed ? parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : dateLine;
   }
-  if(!urlHint && !nameHint && !dateStr && !venueHint) return null;
-  return { urlHint, nameHint, dateStr, venueHint };
+  if(!urlHint && !nameHint && !dateStr && !venueHint && !vividHint) return null;
+  return { urlHint, nameHint, dateStr, venueHint, vividHint };
 }
 addShowPasteInput.addEventListener('input', () => {
   const hint = parsePastedEventDetails(addShowPasteInput.value);
@@ -2404,6 +2443,7 @@ addShowPasteInput.addEventListener('input', () => {
   if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
   if(hint.venueHint && !addShowVenueInput.value.trim()) addShowVenueInput.value = hint.venueHint;
   if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
+  if(hint.vividHint && !addShowVividLink) addShowVividLink = hint.vividHint;
   updateAddShowPreview();
 });
 
@@ -2417,6 +2457,7 @@ function openAddShowModal(){
   addShowVenueInput.value = '';
   addShowDateInput.value = '';
   addShowPasteInput.value = '';
+  addShowVividLink = '';
   addShowSlugHint.style.display = 'none';
   addShowManualWrap.style.display = 'none';
   addShowEditToggle.textContent = '✏️ Edit details manually';
@@ -2490,6 +2531,7 @@ addShowLinkInput.addEventListener('paste', e => {
     if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
     if(hint.venueHint && !addShowVenueInput.value.trim()) addShowVenueInput.value = hint.venueHint;
     if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
+    if(hint.vividHint && !addShowVividLink) addShowVividLink = hint.vividHint;
   }
   // Still worth a pass through the slug parser too — a descriptive URL
   // pasted this way should get the same treatment as one pasted plain.
@@ -2541,7 +2583,7 @@ addShowSubmitBtn.addEventListener('click', async () => {
   const newEvent = {
     name, venue, dateStr: dateStrRaw,
     dateObj: parsedDate ? parsedDate.toISOString() : null,
-    primarySite: 'ticketmaster', primaryLink: link, vividLink: '', stubLink: ''
+    primarySite: 'ticketmaster', primaryLink: link, vividLink: addShowVividLink, stubLink: ''
   };
   pushUndo();
   allEvents = [...allEvents, newEvent];
@@ -2977,6 +3019,27 @@ let noteSnapshotOnOpen = null; // ann.note captured when the panel opened, so cl
 let historyExpandedKeys = new Set(); // keys whose note-history list is currently expanded
 let archiveOnly = false; // filter: show only archived events instead of hiding them
 let newOnly = false; // filter: only show events flagged New by the last upload
+// A deliberate, separate view rather than something automatically
+// stitched into every search result the way it used to be — reached
+// only by clicking the 📜 icon on a tour heading (pre-filtered to that
+// name) or "📜 History" in the account menu (everything). Takes over
+// the main list the same way search results do, and the same "click
+// Bring back / Delete forever, watch it actually disappear" logic
+// applies, since renderHistoryView() re-derives its list fresh from
+// remoteCache every render() the same way search does — nothing here
+// is a stale snapshot that could linger after being acted on.
+let historyViewActive = false;
+let historyViewFilter = '';
+function openHistoryView(filterQuery){
+  historyViewActive = true;
+  historyViewFilter = filterQuery || '';
+  searchInput.value = '';
+  render();
+}
+function closeHistoryView(){
+  historyViewActive = false;
+  historyViewFilter = '';
+}
 let collapsedSections = new Set(); // heading text -> collapsed. Click a heading to toggle.
 // The bulk toggle button cycles through three states rather than just
 // two — fully collapsed (only top-level headings, like "10:00 AM
@@ -4927,6 +4990,7 @@ function createSheetFromModal(){
   newFilterBtn.classList.remove('active');
   archiveOnly = false;
   accountMenuArchived.classList.remove('active');
+  closeHistoryView();
   collapsedSections = new Set();
   expandCycleState = 2;
   savedCollapsedSections = null;
@@ -4957,6 +5021,7 @@ function setActiveSheet(name){
   newFilterBtn.classList.remove('active');
   archiveOnly = false;
   accountMenuArchived.classList.remove('active');
+  closeHistoryView();
   collapsedSections = new Set();
   expandCycleState = 2;
   savedCollapsedSections = null;
@@ -5303,6 +5368,12 @@ function groupByName(events){
 }
 
 function render(){
+  if(historyViewActive){
+    updateModeUI();
+    renderHistoryView();
+    refreshNavigation();
+    return;
+  }
   const query = searchInput.value.trim();
   if(query){
     updateModeUI();
@@ -5672,8 +5743,13 @@ function renderSearchResults(query){
   } else if(!archivedMatched.length){
     html += `<p class="insights-empty" style="padding:16px 20px;">No active matches for "${escapeHtml(query)}" — but see below.</p>`;
   }
+  // A single low-key link instead of the full list inline — History is
+  // still one click away, but doesn't compete for attention with what's
+  // actually on sale right now just because a search happened to also
+  // match something passed or deleted. Pre-filtered to this same query
+  // when it lands in the dedicated History view.
   if(historicalMatched.length){
-    html += historySearchSectionHtml(historicalMatched);
+    html += `<button type="button" class="history-view-link" data-action="view-history-for-heading" data-heading="${escapeHtml(query)}">📜 ${historicalMatched.length} passed/deleted show${historicalMatched.length === 1 ? '' : 's'} match "${escapeHtml(query)}" — view in History</button>`;
   }
   // Archived last, all the way at the bottom, below History — the two
   // "put away" categories sit together, with the still-live, still-
@@ -5732,6 +5808,39 @@ function historySearchSectionHtml(historicalMatched){
   return `
     <p class="notes-label" style="margin:24px 20px 8px;">📜 Passed shows (${historicalMatched.length})</p>
     <div class="history-search-list">${rows}</div>`;
+}
+// The dedicated History view (see historyViewActive/openHistoryView
+// above) — same row rendering as the old inline search section, just
+// reached deliberately instead of appearing unasked, and covering
+// EVERY history item (optionally narrowed to one tour's name) rather
+// than only whatever a live search query happened to match.
+function renderHistoryView(){
+  emptyState.style.display = 'none';
+  sortSelect.style.display = 'none';
+  const { events, annotationsMap } = buildEventsAndAnnotations(remoteCache);
+  if(!searchAnnotationsMap) searchAnnotationsMap = new Map();
+  events.forEach(ev => {
+    const key = eventKey(ev);
+    if(!searchAnnotationsMap.has(key)){
+      searchAnnotationsMap.set(key, { ev, ann: annotationsMap[key], sheetName: ev.__sheet });
+    }
+  });
+  const historyEvents = events.filter(ev => {
+    if(ev.__mode !== 'history') return false;
+    // Same "never leak someone else's private-sheet deletions" rule as
+    // the old inline section had.
+    const privateMatch = (ev.deletedFromSheet || '').match(/^(.+) — (.+)$/);
+    if(privateMatch && currentUser !== privateMatch[2]) return false;
+    if(historyViewFilter && !matchesSearch(ev, historyViewFilter, searchAnnotationsMap.get(eventKey(ev)).ann)) return false;
+    return true;
+  });
+  countLabel.textContent = `${historyEvents.length} in History${historyViewFilter ? ` for "${historyViewFilter}"` : ''}`;
+  const backBtnHtml = `<button type="button" class="history-view-back-btn" id="historyViewBackBtn">← Back</button>`;
+  if(!historyEvents.length){
+    listRoot.innerHTML = backBtnHtml + `<p class="insights-empty" style="padding:40px 20px;text-align:center;">Nothing ${historyViewFilter ? `for "${escapeHtml(historyViewFilter)}" ` : ''}in History.</p>`;
+    return;
+  }
+  listRoot.innerHTML = backBtnHtml + historySearchSectionHtml(historyEvents);
 }
 // The bottom-of-search "Archived" section — collapsed by default (it's
 // a native <details>, so no extra JS needed to toggle it) since these
@@ -6997,6 +7106,7 @@ window.addEventListener('message', event => {
     if(ev.name && !addShowNameInput.value.trim()) addShowNameInput.value = ev.name;
     if(ev.venue && !addShowVenueInput.value.trim()) addShowVenueInput.value = ev.venue;
     if(ev.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = ev.dateStr;
+    if(ev.vividLink && !addShowVividLink) addShowVividLink = ev.vividLink;
     addShowLinkInput.dispatchEvent(new Event('input', { bubbles: true })); // triggers the slug-hint check too, harmless if it finds nothing new
     updateAddShowPreview();
   }
@@ -7522,10 +7632,19 @@ function dayHeadingHtml(label, extraHtml = '', pinKeys = null, sectionKeyOverrid
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v12H7l-3 3V4z"/><path d="M8 9h8M8 12h5" stroke-dasharray="1.8 1.8"/></svg>
   </button>`;
   const tourNotePreview = existingNote ? `<div class="heading-tour-note" data-action="edit-tour-note" data-heading="${escapeHtml(label)}" title="Click to edit">📝 ${escapeHtml(existingNote)}</div>` : '';
+  // Low-key on purpose — passed/deleted shows for this tour are useful
+  // to dig up occasionally, not something that needs to compete for
+  // attention with the actually-live cards below. One click jumps to
+  // the dedicated History view, pre-filtered to this heading's name,
+  // instead of History being automatically dumped inline under every
+  // search result the way it used to be.
+  const historyBtn = `<button type="button" class="icon-btn heading-history-btn" data-action="view-history-for-heading" data-heading="${escapeHtml(label)}" title="View passed/deleted shows for this tour in History">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l4 2" stroke-dasharray="1.8 1.8"/></svg>
+  </button>`;
   return `<div class="day-heading collapsible-heading ${extraClass} ${collapsed ? 'collapsed' : ''}" data-section="${escapeHtml(key)}">
     <svg class="collapse-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
     <span class="heading-label">${escapeHtml(label)}</span>${extraHtml}
-    <div class="heading-icons">${bulkReleaseBtn}${tourNoteBtn}${bulkCodeBtn}${pinBtn}</div>
+    <div class="heading-icons">${bulkReleaseBtn}${tourNoteBtn}${bulkCodeBtn}${historyBtn}${pinBtn}</div>
   </div>${tourNotePreview}`;
 }
 
@@ -7590,6 +7709,7 @@ function updateSearchModeState(){
 // makes typing itself feel laggy. Waiting for a brief pause means only
 // the query you actually finished typing pays that cost.
 function handleSearchChange(){
+  if(historyViewActive) closeHistoryView(); // typing a real search signals leaving the dedicated History view, not searching within it
   updateSearchModeState();
   clearTimeout(searchRenderTimer);
   searchRenderTimer = setTimeout(render, 180);
@@ -7735,6 +7855,19 @@ listRoot.addEventListener('click', async e => {
     const entered = await promptLongText(`Note for "${heading}" — applies to the whole tour, not any single show`, current);
     if(entered === null) return;
     await saveTourNote(heading, entered);
+    render();
+    return;
+  }
+
+  const viewHistoryBtn = e.target.closest('[data-action="view-history-for-heading"]');
+  if(viewHistoryBtn){
+    openHistoryView(viewHistoryBtn.dataset.heading || '');
+    return;
+  }
+
+  const historyBackBtn = e.target.closest('#historyViewBackBtn');
+  if(historyBackBtn){
+    closeHistoryView();
     render();
     return;
   }
@@ -8466,6 +8599,20 @@ async function initApp(){
   }
   await loadAllFromRemote();
   if(syncUrl) startSyncPolling();
+  // Signals the companion extension that the app has actually finished
+  // its real work — restoring login AND fetching sheets/events from
+  // Google Sheets — not just that the page's HTML finished loading.
+  // Those are very different moments: a person can see this page
+  // render near-instantly while the Google Sheets round trip is still
+  // in flight, and if the extension's "Send to Ticket Library" handoff
+  // arrives during that gap, sheets is still empty, activeSheet()
+  // returns nothing, and Add Show's permission check fails — not
+  // because of who's logged in, but because there's no sheet data yet
+  // to check permissions against at all. That showed up as a
+  // misleading "Only Sam can add shows to US Open" alert on a tab the
+  // extension had just opened, which had nothing to do with real
+  // permissions.
+  window.postMessage({ source: 'ticket-library', type: 'APP_DATA_READY' }, '*');
 }
 initApp();
 // Belt-and-suspenders for the stale-search-value problem: browser
