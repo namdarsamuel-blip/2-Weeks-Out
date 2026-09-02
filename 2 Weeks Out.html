@@ -1294,6 +1294,10 @@
     padding:8px 0 4px;
   }
   .add-show-edit-toggle:hover{color:var(--text);text-decoration:underline;}
+  .add-show-error{
+    font-size:12.5px;color:var(--coral);background:rgba(255,107,106,.08);
+    border:1px solid rgba(255,107,106,.3);border-radius:7px;padding:8px 10px;margin:0 0 12px;
+  }
   .add-show-submit-btn{
     width:100%;font-family:'Inter',sans-serif;font-size:13.5px;font-weight:700;
     padding:11px;border-radius:8px;border:none;background:var(--teal);color:#0d1a19;
@@ -1922,6 +1926,7 @@
         </div>
       </div>
 
+      <p class="add-show-error" id="addShowError" style="display:none;"></p>
       <button type="button" class="add-show-submit-btn" id="addShowSubmitBtn">+ Add show</button>
     </div>
   </div>
@@ -2380,6 +2385,7 @@ function openAddShowModal(){
   addShowSlugHint.style.display = 'none';
   addShowManualWrap.style.display = 'none';
   addShowEditToggle.textContent = '✏️ Edit details manually';
+  addShowError.style.display = 'none';
   updateAddShowPreview();
   addShowModal.style.display = 'flex';
   addShowLinkInput.focus();
@@ -2463,14 +2469,29 @@ addShowLinkInput.addEventListener('paste', () => {
   }, 50);
 });
 
+const addShowError = $('#addShowError');
 addShowSubmitBtn.addEventListener('click', async () => {
   const name = addShowNameInput.value.trim();
   const venue = addShowVenueInput.value.trim();
   const dateStrRaw = addShowDateInput.value.trim();
   const link = addShowLinkInput.value.trim();
-  if(!name){ alert('Give it at least a name.'); addShowNameInput.focus(); return; }
+  addShowError.style.display = 'none';
+  if(!name){
+    // Reveal the manual fields too — if someone's relying purely on the
+    // preview and hits Add with nothing extracted, the name field they
+    // need to fill in might still be hidden behind the edit toggle.
+    if(addShowManualWrap.style.display === 'none'){
+      addShowManualWrap.style.display = 'block';
+      addShowEditToggle.textContent = '✏️ Hide manual details';
+    }
+    addShowError.textContent = 'Give it at least a name.';
+    addShowError.style.display = 'block';
+    addShowNameInput.focus();
+    return;
+  }
   if(!sheets.length || (activeSheet() && (activeSheet().mode === 'trash' || activeSheet().mode === 'history'))){
-    alert('Switch to a regular sheet first — Trash and History aren\'t places to add a new show.');
+    addShowError.textContent = "Switch to a regular sheet first — Trash and History aren't places to add a new show.";
+    addShowError.style.display = 'block';
     return;
   }
   const parsedDate = dateStrRaw ? parseEventDate(dateStrRaw) : null;
