@@ -2307,20 +2307,54 @@ addShowEditToggle.addEventListener('click', () => {
 // that reads as a date, and a venue/location line — in whichever of
 // those three actually appear, in whatever order they were pasted.
 function parsePastedEventDetails(text){
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  if(!lines.length) return null;
-  // The companion extension's "Send to Ticket Library" button (on a
-  // Ticketmaster page) copies the URL as its first line, ahead of the
-  // name/date/venue — if that's what's here, peel it off as the link
-  // and parse everything else exactly as before. A person manually
-  // copying just the visible name/date/venue text (no button involved)
-  // won't have a URL line at all, so this only ever adds a capability,
-  // never changes the existing behavior.
-  let urlHint = null;
-  if(/^https?:\/\//i.test(lines[0])){
-    urlHint = lines.shift();
-  }
+  if(!text || !text.trim()) return null;
+  // A real copy-paste off a ticket page is rarely the clean 3-line
+  // shape below on its own — it often carries page chrome ("More
+  // Info"), a markdown-style venue link some browsers/readers produce
+  // ([Crypto.com Arena, Los Angeles, CA](https://...)), and the actual
+  // event URL sitting wherever it happened to be selected from rather
+  // than neatly up top. This does three passes of cleanup before ever
+  // getting to the name/date/venue splitting logic below, so all of
+  // that survives instead of polluting the result.
+
+  // 1) Pull out every URL anywhere in the block, not just a leading
+  // line — prefer one whose path reads like an actual event page
+  // (/event/) over any other link along for the ride (a venue's own
+  // page, "more info", etc.); fall back to whichever URL came first if
+  // none look like that.
+  const urlMatches = Array.from(text.matchAll(/https?:\/\/[^\s)]+/g)).map(m => m[0]);
+  const urlHint = urlMatches.find(u => /\/event\//i.test(u)) || urlMatches[0] || null;
+
+  // 2) Markdown-style links reduce to just their visible text — a
+  // venue wrapped as [Crypto.com Arena, Los Angeles, CA](url) should
+  // read as plain venue text, not link syntax; its URL was already
+  // captured above (or discarded) by the pass that just ran.
+  let cleaned = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  // Any URL still sitting bare in the text (on its own line, not part
+  // of a markdown link) gets removed entirely now that it's been
+  // captured as urlHint — left in place, a lone URL line has no name-
+  // or date-like shape to it, so it would otherwise fall through and
+  // get misread as the venue.
+  cleaned = cleaned.replace(/https?:\/\/\S+/g, '');
+  // Bullet separators between day/date/time ("Tue • Sep 01, 2026 • 8:00
+  // PM") aren't something Date parsing understands — flattened to
+  // commas, which it does.
+  cleaned = cleaned.replace(/[•·]/g, ',');
+  // A markdown link stripped to plain text right after a time, with no
+  // space in the original ("8:00 PM[Venue..."), leaves the date and
+  // venue fused onto one line with no boundary between them. Inserting
+  // a line break right after AM/PM whenever it's immediately followed
+  // by a letter recovers that boundary before the line-by-line pass
+  // below ever sees it.
+  cleaned = cleaned.replace(/\b(AM|PM)(?=[A-Za-z])/gi, '$1\n');
+
+  // 3) Page chrome that shows up as its own line on most ticket sites —
+  // filtered by exact match (case-insensitive) so it's dropped
+  // entirely rather than getting glued onto the name or venue guess.
+  const noiseLines = new Set(['more info', 'get tickets', 'buy tickets', 'tickets', 'resale tickets', 'view tickets', 'accessible tickets', 'i more info']);
+  const lines = cleaned.split('\n').map(l => l.trim()).filter(l => l && !noiseLines.has(l.toLowerCase()));
   if(!lines.length) return urlHint ? { urlHint, nameHint: null, dateStr: null, venueHint: null } : null;
+
   // A date line reliably has a month name near some digits — this is
   // deliberately loose (doesn't require a year or a time) since the
   // goal is just to find WHICH line is the date, not to parse it here;
@@ -2364,6 +2398,7 @@ addShowPasteInput.addEventListener('input', () => {
   // slug hint below.
   if(hint.urlHint && !addShowLinkInput.value.trim()){
     addShowLinkInput.value = hint.urlHint;
+    addShowLinkEditedAt = Date.now(); // a real, deliberate fill — not the stale-autofill the poll below is watching for
     addShowLinkInput.dispatchEvent(new Event('input', { bubbles: true })); // let the slug-hint check run too
   }
   if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
@@ -2395,16 +2430,24 @@ function openAddShowModal(){
   // field shortly AFTER a script clears it, so one clear on open isn't
   // always enough — this field's placeholder and label read enough like
   // a URL field that it's a plausible autofill target. Tracked by
-  // TIMING (last real keydown/paste), not by comparing values — autofill
-  // often dispatches its own synthetic 'input' event too, so checking
-  // "does the value match what I last saw" would just treat an
-  // autofilled value as if the person had typed it themselves.
+  // TIMING (last real keydown/paste, or the app's own deliberate fills —
+  // see addShowLinkEditedAt = Date.now() at every legitimate autofill
+  // site), not by comparing values — autofill often dispatches its own
+  // synthetic 'input' event too, so checking "does the value match what
+  // I last saw" would just treat an autofilled value as if the person
+  // had typed it themselves. The threshold is generous on purpose: the
+  // only time addShowLinkEditedAt is stale is when NOTHING legitimate
+  // has touched this field recently, which is exactly the case that
+  // should get cleared — a real edit (typed, pasted, or one of this
+  // app's own auto-fills) always re-marks it fresh, so a wide window
+  // here only ever risks being too lenient toward genuine autofill
+  // landing very late, never too eager against something real.
   let checks = 0;
   const interval = setInterval(() => {
     checks++;
-    if(checks > 10 || addShowModal.style.display !== 'flex'){ clearInterval(interval); return; }
-    if(addShowLinkInput.value && Date.now() - addShowLinkEditedAt > 1000) addShowLinkInput.value = '';
-  }, 200);
+    if(checks > 15 || addShowModal.style.display !== 'flex'){ clearInterval(interval); return; }
+    if(addShowLinkInput.value && Date.now() - addShowLinkEditedAt > 3000) addShowLinkInput.value = '';
+  }, 300);
 }
 let addShowLinkEditedAt = 0;
 addShowLinkInput.addEventListener('keydown', () => { addShowLinkEditedAt = Date.now(); });
@@ -6947,7 +6990,10 @@ window.addEventListener('message', event => {
   if(data.type === 'FILL_ADD_SHOW' && data.event){
     if(addShowModal.style.display !== 'flex') openAddShowModal();
     const ev = data.event;
-    if(ev.url && !addShowLinkInput.value.trim()) addShowLinkInput.value = ev.url;
+    if(ev.url && !addShowLinkInput.value.trim()){
+      addShowLinkInput.value = ev.url;
+      addShowLinkEditedAt = Date.now(); // a real, deliberate fill — not the stale-autofill the poll in openAddShowModal is watching for
+    }
     if(ev.name && !addShowNameInput.value.trim()) addShowNameInput.value = ev.name;
     if(ev.venue && !addShowVenueInput.value.trim()) addShowVenueInput.value = ev.venue;
     if(ev.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = ev.dateStr;
@@ -8299,36 +8345,61 @@ listRoot.addEventListener('focusout', e => {
   setTimeout(render, 0);
 });
 
-// Only ever intervene when the drag is actually carrying a file — a
-// dragged link (from the address bar, a bookmark, another tab, etc.)
-// shows up in dataTransfer with types like "text/uri-list"/"text/plain"
-// but never "Files". Earlier this called preventDefault() unconditionally
-// on every drag over the page, which blocked whatever the browser would
-// otherwise have done with a dropped link, and then handed it to
-// handleCsvUpload anyway — some browsers represent a dragged link as a
-// tiny virtual file (e.g. a ".url" file) in dataTransfer.files, so it
-// didn't even hit the "no file" early return; it went all the way into
-// "parsed but produced no rows," a CSV error for something that was
-// never meant to be a CSV. Checking for "Files" specifically up front
-// means a dragged link now passes straight through untouched, the same
-// as it would on any other page.
+// Only ever intervene as a file-upload target when the drag is
+// genuinely a file — a dragged link (from the address bar, a bookmark,
+// another tab, etc.) can ALSO show up with "Files" in dataTransfer
+// (some browsers synthesize a tiny fake file to represent the link
+// itself), so checking for "Files" alone isn't enough to tell a real
+// file apart from a dragged link — that's exactly what caused a dragged
+// bookmark to be treated as an attempted CSV upload and fail with a
+// confusing "produced no rows" error. "text/uri-list" is the reliable
+// signal instead: a genuine file drag from the OS file system almost
+// never carries it, a dragged link/bookmark always does — checked
+// first, before "Files" ever gets a say.
+function dragIsLink(e){
+  return !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('text/uri-list'));
+}
 function dragCarriesFiles(e){
   return !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
 }
 ['dragenter','dragover'].forEach(evt => {
   document.addEventListener(evt, e => {
+    // Claims the drop target for either kind of drag (required for
+    // 'drop' to fire the way we want instead of the browser rejecting
+    // it or falling back to its own default) — but only shows the
+    // "drop a CSV here" highlight for what looks like an actual file,
+    // since that's misleading for a link.
+    if(dragIsLink(e)){ e.preventDefault(); return; }
     if(!dragCarriesFiles(e)) return;
     e.preventDefault();
     dropZone.classList.add('drag');
   });
 });
 document.addEventListener('dragleave', e => {
+  if(dragIsLink(e)) return;
   if(!dragCarriesFiles(e)) return;
   e.preventDefault();
   dropZone.classList.remove('drag');
 });
 document.addEventListener('drop', e => {
-  if(!dragCarriesFiles(e)) return; // not a file — let the browser handle it normally (e.g. a dropped link)
+  if(dragIsLink(e)){
+    // Dragging in a link opens it — directly, rather than leaving it to
+    // the browser's own default drop behavior, which (now that dragover
+    // above has already claimed this page as a valid drop target)
+    // otherwise ends up doing nothing at all rather than actually
+    // navigating anywhere.
+    const url = (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || '').trim().split('\n')[0].trim();
+    if(/^https?:\/\//i.test(url)){
+      e.preventDefault();
+      window.open(url, '_blank', 'noopener');
+      return;
+    }
+    // text/uri-list was present but wasn't a real web link (some Linux
+    // file managers include a local file:// URI alongside a genuine
+    // file drag) — falls through to the normal file-handling path below
+    // instead of assuming "link" and opening nothing.
+  }
+  if(!dragCarriesFiles(e)) return; // not a file — let the browser handle it normally
   e.preventDefault();
   dropZone.classList.remove('drag');
   const file = e.dataTransfer.files[0];
