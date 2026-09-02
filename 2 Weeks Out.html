@@ -501,18 +501,6 @@
     cursor:pointer;transition:border-color .15s ease,color .15s ease,background .15s ease;
   }
   .bulk-open-btn:hover{border-color:var(--teal);color:var(--teal);background:rgba(79,200,191,.06);}
-  /* Each platform's ↗ button is tinted to match its own link-button
-     color (see .link-btn.site-tm etc. below) — resting state just
-     hints at it (colored text/border, transparent fill) so a heading
-     full of these doesn't turn into a wall of solid color; hover fills
-     in the same color, same "about to act" signal every other button
-     in this app gives on hover. */
-  .bulk-open-btn[data-platform="site-tm"]{border-color:rgba(10,92,255,.35);color:var(--tm-blue);}
-  .bulk-open-btn[data-platform="site-tm"]:hover{border-color:var(--tm-blue);color:var(--tm-blue);background:rgba(10,92,255,.12);}
-  .bulk-open-btn[data-platform="site-vivid"]{border-color:rgba(255,61,129,.35);color:var(--vivid-pink);}
-  .bulk-open-btn[data-platform="site-vivid"]:hover{border-color:var(--vivid-pink);color:var(--vivid-pink);background:rgba(255,61,129,.12);}
-  .bulk-open-btn[data-platform="site-stub"]{border-color:rgba(255,122,26,.35);color:var(--stub-orange);}
-  .bulk-open-btn[data-platform="site-stub"]:hover{border-color:var(--stub-orange);color:var(--stub-orange);background:rgba(255,122,26,.12);}
   /* Fixed to the viewport, not the scrolling <main> — bottom-right,
      clear of the bulk-open toast (which is centered) so both can be
      visible at once without overlapping. */
@@ -2342,6 +2330,30 @@ addShowLinkInput.addEventListener('input', () => {
   if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
   addShowSlugHint.style.display = 'block';
   addShowSlugHint.textContent = `Pulled from the link: ${[hint.nameHint, hint.dateStr].filter(Boolean).join(' · ')} — the name is a raw guess from the URL text, so it's worth splitting the venue out of it and double-checking the date.`;
+});
+// A single paste into this field is now enough on its own — if what
+// lands in the clipboard is more than just a bare URL (the companion
+// extension's "Send to Ticket Library" button copies the link AND the
+// name/date/venue together as one block, see ticketmaster-content.js),
+// this catches that automatically instead of making someone separately
+// open "paste event details" and paste there too. A plain single-line
+// URL paste is untouched — it falls straight through to the normal
+// paste behavior and the slug-hint 'input' listener above, exactly as
+// before.
+addShowLinkInput.addEventListener('paste', e => {
+  const pasted = (e.clipboardData || window.clipboardData).getData('text');
+  if(!pasted || !pasted.includes('\n')) return; // just a URL — let it paste normally
+  e.preventDefault();
+  const hint = parsePastedEventDetails(pasted);
+  addShowLinkInput.value = (hint && hint.urlHint) ? hint.urlHint : pasted.split('\n')[0].trim();
+  if(hint){
+    if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
+    if(hint.venueHint && !addShowVenueInput.value.trim()) addShowVenueInput.value = hint.venueHint;
+    if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
+  }
+  // Still worth a pass through the slug parser too — a descriptive URL
+  // pasted this way should get the same treatment as one pasted plain.
+  addShowLinkInput.dispatchEvent(new Event('input', { bubbles: true }));
 });
 
 addShowSubmitBtn.addEventListener('click', async () => {
