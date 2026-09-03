@@ -1909,6 +1909,10 @@
     <div class="insights-modal-body">
       <p class="modal-desc-text" style="margin-bottom:14px;">Paste a ticket link — a descriptive Ticketmaster URL, or the whole block copied from the companion extension's "Send to Ticket Library" button, fills in the rest below on its own.</p>
       <div class="add-show-field">
+        <label class="add-show-label">Add to sheet</label>
+        <select class="modal-text-input" id="addShowSheetSelect"></select>
+      </div>
+      <div class="add-show-field">
         <label class="add-show-label">Ticket link</label>
         <input type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" name="ticketlibrary-addshow-link-nofill" class="modal-text-input" id="addShowLinkInput" placeholder="Paste a Ticketmaster/VividSeats/StubHub link">
       </div>
@@ -1920,7 +1924,6 @@
           <div class="add-show-preview-date" id="addShowPreviewDate"></div>
           <div class="add-show-preview-name" id="addShowPreviewName"></div>
           <div class="add-show-preview-venue" id="addShowPreviewVenue"></div>
-          <div class="add-show-preview-vivid" id="addShowPreviewVivid" style="display:none;">🩷 VividSeats link found too</div>
         </div>
       </div>
       <button type="button" class="add-show-edit-toggle" id="addShowEditToggle">✏️ Edit details manually</button>
@@ -1937,6 +1940,10 @@
         <div class="add-show-field">
           <label class="add-show-label">Date</label>
           <input type="text" autocomplete="off" class="modal-text-input" id="addShowDateInput" placeholder="e.g. Dec 22, 2026 or 12/22/2026">
+        </div>
+        <div class="add-show-field">
+          <label class="add-show-label">VividSeats link <span class="add-show-label-optional">(optional)</span></label>
+          <input type="text" autocomplete="off" class="modal-text-input" id="addShowVividInput" placeholder="Paste a VividSeats link — auto-fills if the companion extension found a matching tab">
         </div>
         <div class="add-show-field">
           <label class="add-show-label">Pasted event details <span class="add-show-label-optional">(optional)</span></label>
@@ -2271,10 +2278,12 @@ function parseTicketmasterSlugHint(url){
 const addShowModal = $('#addShowModal');
 const addShowBtn = $('#addShowBtn');
 const closeAddShowBtn = $('#closeAddShowBtn');
+const addShowSheetSelect = $('#addShowSheetSelect');
 const addShowLinkInput = $('#addShowLinkInput');
 const addShowNameInput = $('#addShowNameInput');
 const addShowVenueInput = $('#addShowVenueInput');
 const addShowDateInput = $('#addShowDateInput');
+const addShowVividInput = $('#addShowVividInput');
 const addShowSlugHint = $('#addShowSlugHint');
 const addShowSubmitBtn = $('#addShowSubmitBtn');
 const addShowPasteInput = $('#addShowPasteInput');
@@ -2283,15 +2292,8 @@ const addShowPreviewCard = $('#addShowPreviewCard');
 const addShowPreviewDate = $('#addShowPreviewDate');
 const addShowPreviewName = $('#addShowPreviewName');
 const addShowPreviewVenue = $('#addShowPreviewVenue');
-const addShowPreviewVivid = $('#addShowPreviewVivid');
 const addShowEditToggle = $('#addShowEditToggle');
 const addShowManualWrap = $('#addShowManualWrap');
-// No visible field for this — it only ever arrives already paired with
-// the main ticket link (the companion extension's cross-tab matching,
-// or a "VividSeats: <url>" line in a pasted block), so there's nothing
-// for a person to type in here themselves. Cleared on every modal open,
-// carried into the submitted event alongside everything else.
-let addShowVividLink = '';
 
 // The whole "paste link, see it, hit add" flow hinges on this — every
 // auto-fill path (slug parsing, pasted-details parsing, the companion
@@ -2312,7 +2314,6 @@ function updateAddShowPreview(){
   addShowPreviewCard.style.display = 'block';
   addShowPreviewName.textContent = name || '(no name yet)';
   addShowPreviewVenue.textContent = venue || '(no venue yet)';
-  addShowPreviewVivid.style.display = addShowVividLink ? 'block' : 'none';
   const parsedDate = dateStr ? parseEventDate(dateStr) : null;
   addShowPreviewDate.textContent = parsedDate
     ? parsedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ', ' + parsedDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -2327,6 +2328,21 @@ addShowEditToggle.addEventListener('click', () => {
   addShowEditToggle.textContent = showing ? '✏️ Edit details manually' : '✏️ Hide manual details';
   if(!showing) addShowNameInput.focus();
 });
+// Whenever anything gets auto-filled — from any source, extension
+// relay, a pasted block, or a descriptive URL's slug — the manual
+// fields open right along with it. The preview alone is good for a
+// quick glance, but "let me edit what it filled in" means actually
+// being able to see and correct the individual fields without an extra
+// click first, especially since auto-fill is a best-effort guess (a
+// slug-parsed name is often not exactly right, a matched VividSeats tab
+// could be the wrong date) that's worth a second look before hitting
+// Add, not just after something goes wrong.
+function revealAddShowManualDetails(){
+  if(addShowManualWrap.style.display === 'none'){
+    addShowManualWrap.style.display = 'block';
+    addShowEditToggle.textContent = '✏️ Hide manual details';
+  }
+}
 
 // The legitimate middle ground for a bare event-ID link, which has
 // nothing in the URL itself to parse (see parseTicketmasterSlugHint's
@@ -2360,7 +2376,14 @@ function parsePastedEventDetails(text){
   // as a whole line before the rest of this even looks at it.
   const vividLineMatch = text.match(/vividseats\s*:\s*(https?:\/\/\S+)/i);
   const vividHint = vividLineMatch ? vividLineMatch[1] : null;
-  const textWithoutVividLine = vividLineMatch ? text.replace(vividLineMatch[0], '') : text;
+  let textWithoutVividLine = vividLineMatch ? text.replace(vividLineMatch[0], '') : text;
+  // A "From $X (fees not included...)" line — what the companion
+  // extension's clipboard fallback writes when it found a starting
+  // price on the page — gets stripped the same way: it isn't part of
+  // the venue, and left in place would otherwise just get glued onto
+  // the end of whatever venue text follows it.
+  const priceLineMatch = textWithoutVividLine.match(/^.*\bFrom\s+(?:US\$|CA\$|\$|[A-Z]{3}\s)\d[\d,.]*\s*\(fees not included.*$/im);
+  if(priceLineMatch) textWithoutVividLine = textWithoutVividLine.replace(priceLineMatch[0], '');
   const urlMatches = Array.from(textWithoutVividLine.matchAll(/https?:\/\/[^\s)]+/g)).map(m => m[0]);
   const urlHint = urlMatches.find(u => /\/event\//i.test(u)) || urlMatches[0] || null;
 
@@ -2384,8 +2407,14 @@ function parsePastedEventDetails(text){
   // venue fused onto one line with no boundary between them. Inserting
   // a line break right after AM/PM whenever it's immediately followed
   // by a letter recovers that boundary before the line-by-line pass
-  // below ever sees it.
-  cleaned = cleaned.replace(/\b(AM|PM)(?=[A-Za-z])/gi, '$1\n');
+  // below ever sees it. Requiring AM/PM to actually be preceded by a
+  // time-shaped digit pattern (not just matching the bare letters) is
+  // what keeps this from firing on ordinary words that merely CONTAIN
+  // "am"/"pm" — "Acrisure Amphitheater" was getting split into "Am" +
+  // "phitheater" because "Am" alone matched and had a letter right
+  // after it, with nothing requiring it to actually be functioning as a
+  // time in the first place.
+  cleaned = cleaned.replace(/(\d{1,2}(?::\d{2})?\s*)(AM|PM)(?=[A-Za-z])/gi, '$1$2\n');
 
   // 3) Page chrome that shows up as its own line on most ticket sites —
   // filtered by exact match (case-insensitive) so it's dropped
@@ -2442,13 +2471,40 @@ addShowPasteInput.addEventListener('input', () => {
   if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
   if(hint.venueHint && !addShowVenueInput.value.trim()) addShowVenueInput.value = hint.venueHint;
   if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
-  if(hint.vividHint && !addShowVividLink) addShowVividLink = hint.vividHint;
+  if(hint.vividHint && !addShowVividInput.value.trim()) addShowVividInput.value = hint.vividHint;
   updateAddShowPreview();
 });
 
+// Only ever lists sheets the person could actually add to AND is even
+// allowed to see in the first place — a private sheet not visible to
+// them shouldn't be selectable here just because canAddToSheet() itself
+// doesn't separately check ownership (it's never needed to before, since
+// the only way to reach Add Show used to be already being ON that
+// sheet, which sheetVisibleToCurrentUser already gates on its own).
+// Defaults to whichever sheet is currently active, if that one's a
+// valid choice — falls back to the first available option otherwise
+// (e.g. opening Add Show while looking at US Open as someone other than
+// Sam).
+function populateAddShowSheetSelect(){
+  const addable = sheets.filter(s =>
+    s.mode !== 'trash' && s.mode !== 'history' && s.mode !== 'accounts' && s.mode !== 'tournotes' &&
+    sheetVisibleToCurrentUser(s) && canAddToSheet(s)
+  );
+  addShowSheetSelect.innerHTML = addable.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+  addShowSheetSelect.value = addable.some(s => s.name === activeSheetName) ? activeSheetName : (addable[0] ? addable[0].name : '');
+  return addable;
+}
 function openAddShowModal(){
-  if(!canAddToSheet(activeSheet())){
-    alert("Only Sam can add shows to US Open — everyone can still edit what's already there (notes, star, pin, prices).");
+  // No longer gated on whether the CURRENTLY active sheet allows adding
+  // — someone looking at US Open as a regular (non-Sam) account should
+  // still be able to open Add Show and pick a different sheet they DO
+  // have rights to, rather than being blocked outright just because of
+  // whatever happens to be on screen at the moment. If truly nothing is
+  // addable (e.g. logged out and only US Open even exists), that's when
+  // this actually stops them.
+  const addableSheets = populateAddShowSheetSelect();
+  if(!addableSheets.length){
+    alert("There's no sheet you're able to add a show to right now — log in, or switch to one you own.");
     return;
   }
   setAddShowLink('');
@@ -2456,7 +2512,7 @@ function openAddShowModal(){
   addShowVenueInput.value = '';
   addShowDateInput.value = '';
   addShowPasteInput.value = '';
-  addShowVividLink = '';
+  addShowVividInput.value = '';
   addShowSlugHint.style.display = 'none';
   addShowManualWrap.style.display = 'none';
   addShowEditToggle.textContent = '✏️ Edit details manually';
@@ -2523,6 +2579,7 @@ addShowLinkInput.addEventListener('input', () => {
   if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
   addShowSlugHint.style.display = 'block';
   addShowSlugHint.textContent = `Pulled from the link: ${[hint.nameHint, hint.dateStr].filter(Boolean).join(' · ')} — the name is a raw guess from the URL text, so it's worth splitting the venue out of it and double-checking the date.`;
+  revealAddShowManualDetails();
   updateAddShowPreview();
 });
 // A single paste into this field is now enough on its own — if what
@@ -2544,27 +2601,20 @@ addShowLinkInput.addEventListener('paste', e => {
     if(hint.nameHint && !addShowNameInput.value.trim()) addShowNameInput.value = hint.nameHint;
     if(hint.venueHint && !addShowVenueInput.value.trim()) addShowVenueInput.value = hint.venueHint;
     if(hint.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = hint.dateStr;
-    if(hint.vividHint && !addShowVividLink) addShowVividLink = hint.vividHint;
+    if(hint.vividHint && !addShowVividInput.value.trim()) addShowVividInput.value = hint.vividHint;
   }
   // Still worth a pass through the slug parser too — a descriptive URL
   // pasted this way should get the same treatment as one pasted plain.
   addShowLinkInput.dispatchEvent(new Event('input', { bubbles: true }));
+  revealAddShowManualDetails();
   updateAddShowPreview();
 });
-// Whatever kind of paste just happened (plain URL or the full block),
-// if nothing actually managed to fill in a name, silently leaving the
-// preview stuck on "Nothing to preview yet" with no obvious next step
-// would be worse than just showing the manual fields — so this reveals
-// them automatically in exactly that one case, and leaves them alone
-// otherwise (never auto-collapses something the person already opened
-// or filled in).
+// Whatever kind of paste just happened (plain URL or the full block) —
+// the manual fields open right along with it, same as every other
+// auto-fill path, so what got filled in is always right there to check
+// and correct, not just visible after clicking a separate toggle.
 addShowLinkInput.addEventListener('paste', () => {
-  setTimeout(() => {
-    if(!addShowNameInput.value.trim() && addShowManualWrap.style.display === 'none'){
-      addShowManualWrap.style.display = 'block';
-      addShowEditToggle.textContent = '✏️ Hide manual details';
-    }
-  }, 50);
+  setTimeout(revealAddShowManualDetails, 50);
 });
 
 const addShowError = $('#addShowError');
@@ -2587,18 +2637,32 @@ addShowSubmitBtn.addEventListener('click', async () => {
     addShowNameInput.focus();
     return;
   }
-  if(!sheets.length || (activeSheet() && (activeSheet().mode === 'trash' || activeSheet().mode === 'history'))){
-    addShowError.textContent = "Switch to a regular sheet first — Trash and History aren't places to add a new show.";
-    addShowError.style.display = 'block';
-    return;
-  }
   const parsedDate = dateStrRaw ? parseEventDate(dateStrRaw) : null;
   const newEvent = {
     name, venue, dateStr: dateStrRaw,
     dateObj: parsedDate ? parsedDate.toISOString() : null,
-    primarySite: 'ticketmaster', primaryLink: link, vividLink: addShowVividLink, stubLink: ''
+    primarySite: 'ticketmaster', primaryLink: link, vividLink: addShowVividInput.value.trim(), stubLink: ''
   };
+  const chosenSheetName = addShowSheetSelect.value;
+  const chosenSheet = sheets.find(s => s.name === chosenSheetName);
+  // Re-checked here, not just trusted from when the dropdown was built —
+  // permissions (or who's logged in) could have changed in the time the
+  // modal's been sitting open.
+  if(!chosenSheet || !canAddToSheet(chosenSheet) || !sheetVisibleToCurrentUser(chosenSheet)){
+    addShowError.textContent = "You're not able to add to that sheet — pick a different one.";
+    addShowError.style.display = 'block';
+    populateAddShowSheetSelect();
+    return;
+  }
   pushUndo();
+  if(chosenSheetName !== activeSheetName){
+    // Adding to a DIFFERENT sheet than the one currently on screen —
+    // switches to it first so the normal add-a-show path (which always
+    // operates on whatever's active) lands the new show in the right
+    // place, and so the person actually sees it land there instead of
+    // it silently appearing on a tab they're not even looking at.
+    setActiveSheet(chosenSheetName);
+  }
   allEvents = [...allEvents, newEvent];
   render();
   await pushActiveSheetToRemote();
@@ -6438,6 +6502,33 @@ function normalizeShowName(name){
     .trim();
 }
 
+// Finds the one existing event a batch of VividSeats price notes should
+// attach to — searches every sheet, not just the active one, since a
+// person could easily be price-shopping for a show that's sitting on a
+// different tab than whatever's currently on screen. Deliberately
+// conservative: real word overlap in the name (not just "shares one
+// common word") AND the exact same calendar date, mirroring the
+// extension's own eventInfoLikelyMatches — attaching notes to the wrong
+// show is a real mistake, not just a missed convenience, so this
+// returns null rather than guess when nothing lines up confidently.
+function findEventForIncomingSections(name, dateStr){
+  if(!name) return null;
+  const { events } = buildEventsAndAnnotations(remoteCache);
+  const targetName = normalizeShowName(name);
+  const targetDate = dateStr ? parseEventDate(dateStr) : null;
+  const targetWords = targetName.split(' ').filter(w => w.length > 2);
+  return events.find(ev => {
+    if(ev.deletedAt) return false; // never attach to a History/Trash entry
+    const evWords = new Set(normalizeShowName(ev.name).split(' ').filter(w => w.length > 2));
+    const overlap = targetWords.filter(w => evWords.has(w)).length;
+    if(overlap === 0 || overlap < Math.min(2, targetWords.length)) return false;
+    if(targetDate && ev.dateObj){
+      if(new Date(ev.dateObj).toDateString() !== targetDate.toDateString()) return false;
+    }
+    return true;
+  }) || null;
+}
+
 // The actual "database for quick decision making" — pulls together every
 // show sharing this name across the current sheet: a chronological notes
 // timeline (current note + full history from every one of those shows,
@@ -7116,9 +7207,42 @@ window.addEventListener('message', event => {
     if(ev.name && !addShowNameInput.value.trim()) addShowNameInput.value = ev.name;
     if(ev.venue && !addShowVenueInput.value.trim()) addShowVenueInput.value = ev.venue;
     if(ev.dateStr && !addShowDateInput.value.trim()) addShowDateInput.value = ev.dateStr;
-    if(ev.vividLink && !addShowVividLink) addShowVividLink = ev.vividLink;
+    if(ev.vividLink && !addShowVividInput.value.trim()) addShowVividInput.value = ev.vividLink;
     addShowLinkInput.dispatchEvent(new Event('input', { bubbles: true })); // triggers the slug-hint check too, harmless if it finds nothing new
+    revealAddShowManualDetails();
     updateAddShowPreview();
+  }
+  // Price notes captured while browsing VividSeats (see the companion
+  // extension's note-taking mode) — attaches to an EXISTING event's
+  // sections rather than creating a new one, so this needs to actually
+  // find the right event first: fuzzy name match plus an exact calendar-
+  // date match, the same two-part rule the extension's own cross-tab
+  // matching already uses. Deliberately conservative — a wrong match
+  // here means price notes land on the wrong show, which is a real
+  // mistake, not just a missed convenience, so "couldn't find a
+  // confident match" always wins over guessing.
+  if(data.type === 'FILL_SECTIONS' && data.payload && Array.isArray(data.payload.sections) && data.payload.sections.length){
+    const match = findEventForIncomingSections(data.payload.name, data.payload.dateStr);
+    if(!match){
+      showTransientBulkOpenToast(`⚠️ Couldn't find "${data.payload.name || 'that event'}" in Ticket Library — add the show first.`);
+    } else {
+      const key = eventKey(match);
+      if(match.__sheet && match.__sheet !== activeSheetName){
+        if(!searchAnnotationsMap) searchAnnotationsMap = new Map();
+        if(!searchAnnotationsMap.has(key)){
+          const { annotationsMap } = buildEventsAndAnnotations(remoteCache.filter(ev => ev.appSheet === match.__sheet));
+          searchAnnotationsMap.set(key, { ev: match, ann: annotationsMap[key] || { sections: [] }, sheetName: match.__sheet });
+        }
+      }
+      const ann = getAnnotation(key);
+      if(!ann.sections) ann.sections = [];
+      data.payload.sections.forEach(row => {
+        ann.sections.push({ id: 'sec_' + Math.random().toString(36).slice(2, 9), label: row.label || '', price: row.price || '' });
+      });
+      saveNotesSoon();
+      render();
+      showTransientBulkOpenToast(`✅ Added ${data.payload.sections.length} price note${data.payload.sections.length === 1 ? '' : 's'} to "${match.name}"`);
+    }
   }
 });
 window.postMessage({ source: 'ticket-library', type: 'PING' }, '*');
