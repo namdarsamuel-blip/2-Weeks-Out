@@ -2230,7 +2230,21 @@ async function createAccountFlow(isFirstAccount){
     alert('That passcode is already in use by another account — pick a different one.');
     return;
   }
-  await saveNewAccount(trimmedName, passcode.trim(), isFirstAccount);
+  const succeeded = await saveNewAccount(trimmedName, passcode.trim(), isFirstAccount);
+  if(!succeeded){
+    // The account never actually reached the shared sheet — this is
+    // the exact bug that let one person's device believe it had created
+    // an account that no other device ever saw, then attribute
+    // everything that person did afterward (like a new sheet tab) to
+    // whoever they'd been logged in as before, since currentUser used
+    // to get set here unconditionally regardless of whether the save
+    // actually worked. Staying logged out (not setting currentUser at
+    // all) is what keeps that from happening again — better an honest
+    // "try again" than a session that looks real on one screen and
+    // doesn't exist anywhere else.
+    alert("Couldn't create your account — check your connection and try again. Nothing was saved, and you're not logged in as " + trimmedName + ".");
+    return;
+  }
   currentUser = trimmedName;
   adminModeOn = true;
   localStorage.setItem('ticketWatchLoggedInAs', currentUser);
@@ -3077,12 +3091,26 @@ function loadPeopleFromRemote(){
 // as every other admin action rather than being open to anyone logged
 // in. Rewrites the whole Accounts sheet with the updated list, same
 // replace-the-tab mechanism every other sheet edit in this app uses.
+// Returns whether it actually reached the shared backend — a person
+// creating an account needs to know if it didn't, not have the app
+// quietly carry on as if it had.
 async function saveNewAccount(name, passcode, isAdmin){
-  PEOPLE = [...PEOPLE, { name, passcode, isAdmin }];
+  const optimisticPeople = [...PEOPLE, { name, passcode, isAdmin }];
+  PEOPLE = optimisticPeople;
   // See loadPeopleFromRemote's comment on why passcode/isAdmin are sent
   // as venue/primarySite rather than under their real names.
-  const rows = PEOPLE.map(p => ({ name: p.name, venue: p.passcode, primarySite: p.isAdmin ? 'true' : 'false' }));
-  await pushSheetEvents(ACCOUNTS_SHEET_NAME, 'accounts', rows);
+  const rows = optimisticPeople.map(p => ({ name: p.name, venue: p.passcode, primarySite: p.isAdmin ? 'true' : 'false' }));
+  const succeeded = await pushSheetEvents(ACCOUNTS_SHEET_NAME, 'accounts', rows);
+  if(!succeeded){
+    // Roll the optimistic local addition back — leaving PEOPLE (and
+    // therefore this device's own login-choice list) claiming an
+    // account exists that the shared sheet never actually got is
+    // exactly how one device ends up "logged in" as someone nobody
+    // else's device has ever heard of, silently attributing everything
+    // that person does from then on to nobody real.
+    PEOPLE = PEOPLE.filter(p => p !== optimisticPeople[optimisticPeople.length - 1]);
+    return false;
+  }
   // pushSheetEvents already refreshed remoteCache with the server's
   // authoritative response — re-derive PEOPLE from that instead of
   // trusting the optimistic update above, so two people creating
@@ -3090,6 +3118,7 @@ async function saveNewAccount(name, passcode, isAdmin){
   // list rather than whichever one silently overwrote the other's
   // locally-optimistic guess.
   loadPeopleFromRemote();
+  return true;
 }
 let adminModeOn = false;
 let noteSnapshotOnOpen = null; // ann.note captured when the panel opened, so closing can tell if it actually changed
@@ -3773,7 +3802,7 @@ async function pollRemote(){
 async function pushSheetEvents(sheetName, mode, payloadEvents){
   if(!syncUrl){
     setSyncStatus('Not connected — this change was not saved.', 'error');
-    return;
+    return false;
   }
   pendingPushCount++;
   try{
@@ -3786,8 +3815,10 @@ async function pushSheetEvents(sheetName, mode, payloadEvents){
     if(data && Array.isArray(data.events)) remoteCache = data.events;
     if(data && Array.isArray(data.sheets)) remoteSheetsList = data.sheets;
     setSyncStatus(`Synced ${new Date().toLocaleTimeString()}`, 'ok');
+    return true;
   }catch(err){
     setSyncStatus('Save failed — check your connection and try again.', 'error');
+    return false;
   }finally{
     pendingPushCount = Math.max(0, pendingPushCount - 1);
   }
@@ -6497,6 +6528,35 @@ function normalizeShowName(name){
   return (coreArtistName(name) || '')
     .toLowerCase()
     .replace(/\(touring\)/g, '')
+    // Stylized band names that swap a letter for a look-alike symbol —
+    // "$uicideboy$" being the concrete case that broke this — need that
+    // symbol treated as the LETTER it stands in for, not as pure noise.
+    // Deleting the "$" outright turns "$uicideboy$" into "uicideboy",
+    // which doesn't share a single word with "Suicideboys" the way a
+    // ticket site would actually spell it out; converting it to "s"
+    // first gets "suicideboys" on both sides instead.
+    .replace(/\$/g, 's')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// The stored event's own name still goes through normalizeShowName (and
+// therefore coreArtistName) as before — that's correct there, grouping
+// "Benson Boone: Wanted Man Tour" with "Benson Boone" is exactly the
+// behavior other parts of the app depend on. The INCOMING scraped name
+// does NOT get that treatment here — coreArtistName assumes "Artist -
+// Tour Subtitle" and keeps whatever's before the dash, but a scraped
+// title can just as easily come out reversed ("Bristow VA - Suicideboys"
+// off VividSeats, city/state FIRST), and splitting that the same way
+// throws away the actual artist name and keeps the location. Simpler
+// and safer for this one-directional use: keep every word from the
+// whole raw string, so whichever side actually has the real name still
+// makes it into the comparison.
+function normalizeIncomingName(name){
+  return (name || '')
+    .toLowerCase()
+    .replace(/\$/g, 's')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -6505,26 +6565,32 @@ function normalizeShowName(name){
 // Finds the one existing event a batch of VividSeats price notes should
 // attach to — searches every sheet, not just the active one, since a
 // person could easily be price-shopping for a show that's sitting on a
-// different tab than whatever's currently on screen. Deliberately
-// conservative: real word overlap in the name (not just "shares one
-// common word") AND the exact same calendar date, mirroring the
-// extension's own eventInfoLikelyMatches — attaching notes to the wrong
-// show is a real mistake, not just a missed convenience, so this
-// returns null rather than guess when nothing lines up confidently.
+// different tab than whatever's currently on screen.
+//
+// The name-overlap requirement loosens from 2 shared words down to just
+// 1 whenever a same-day date match is ALSO confirmed — a scraped page
+// title is often noisier than the name actually stored here (city/state
+// text mixed in, as above). The date match is what makes that safe to
+// loosen: two totally different shows landing on the exact same
+// calendar date is rare enough that one strong shared word plus that
+// date is still a confident pairing. Without a usable date on either
+// side, this stays at the stricter 2-word requirement — attaching price
+// notes to the wrong show is a real mistake, not just a missed
+// convenience.
 function findEventForIncomingSections(name, dateStr){
   if(!name) return null;
   const { events } = buildEventsAndAnnotations(remoteCache);
-  const targetName = normalizeShowName(name);
+  const targetName = normalizeIncomingName(name);
   const targetDate = dateStr ? parseEventDate(dateStr) : null;
   const targetWords = targetName.split(' ').filter(w => w.length > 2);
   return events.find(ev => {
     if(ev.deletedAt) return false; // never attach to a History/Trash entry
     const evWords = new Set(normalizeShowName(ev.name).split(' ').filter(w => w.length > 2));
     const overlap = targetWords.filter(w => evWords.has(w)).length;
-    if(overlap === 0 || overlap < Math.min(2, targetWords.length)) return false;
-    if(targetDate && ev.dateObj){
-      if(new Date(ev.dateObj).toDateString() !== targetDate.toDateString()) return false;
-    }
+    const sameDay = !!(targetDate && ev.dateObj && new Date(ev.dateObj).toDateString() === targetDate.toDateString());
+    const requiredOverlap = sameDay ? 1 : Math.min(2, targetWords.length);
+    if(overlap === 0 || overlap < requiredOverlap) return false;
+    if(targetDate && ev.dateObj && !sameDay) return false;
     return true;
   }) || null;
 }
@@ -8732,6 +8798,23 @@ async function initApp(){
     syncUrl = DEFAULT_SYNC_URL;
   }
   await loadAllFromRemote();
+  // A device can be left claiming to be logged in as someone who
+  // doesn't actually exist in the real account list — the exact ghost-
+  // session state the "account creation silently failed but currentUser
+  // got set anyway" bug (now fixed above, in createAccountFlow) used to
+  // leave behind, and the kind of thing that could still happen if an
+  // account is ever removed from the Accounts sheet directly. Only
+  // checked when PEOPLE genuinely loaded something real (not empty) —
+  // an empty list here just as easily means the fetch itself failed
+  // (no internet, Google Sheets briefly unreachable), and logging
+  // someone out over a connectivity blip instead of an actual missing
+  // account would be a worse bug than the one this is fixing.
+  if(currentUser && PEOPLE.length && !PEOPLE.some(p => p.name === currentUser)){
+    currentUser = null;
+    adminModeOn = false;
+    localStorage.removeItem('ticketWatchLoggedInAs');
+    updateAdminModeUI();
+  }
   if(syncUrl) startSyncPolling();
   // Signals the companion extension that the app has actually finished
   // its real work — restoring login AND fetching sheets/events from
