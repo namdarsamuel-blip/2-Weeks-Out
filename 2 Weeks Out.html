@@ -3512,33 +3512,23 @@ document.addEventListener('click', e => {
   const path = e.composedPath();
   const clickedInsideOpenCard = path.some(el => el.dataset && el.dataset.key === openNotesKey);
   if(clickedInsideOpenCard) return;
-  const otherCard = path.find(el => el.dataset && el.dataset.key && el.classList && (el.classList.contains('ticket') || el.classList.contains('shift-block')));
-  if(otherCard){
-    // Was this click on that OTHER card's own link/button/form control
-    // (open a ticket link, pin, archive, etc.) rather than just its
-    // plain content (date, venue text, empty padding)? Those already do
-    // their own specific thing, and popping THAT card's notes panel open
-    // on top of it would be a surprising second action nobody asked
-    // for — so this only switches to plain-content clicks. Either way,
-    // the currently-open panel always closes; it's just a question of
-    // whether a different one opens right after.
-    const clickedInteractive = path.some(el => el.tagName && ['A','BUTTON','INPUT','TEXTAREA','SELECT'].includes(el.tagName));
-    if(!clickedInteractive){
-      pushUndo();
-      openNotesPanel(otherCard.dataset.key);
-      render();
-      return;
-    }
-  }
-  // Every other case — a toolbar button, the search box, a sort
-  // dropdown, a sheet tab, empty background, anything not inside any
-  // card — just closes the panel. Deliberately does NOT check whether
-  // the click landed on something interactive: the whole point is that
-  // dismissing the panel should never depend on what you happened to
-  // click, and the element's own click handler still runs completely
-  // normally afterward since nothing here calls stopPropagation or
-  // preventDefault — closing the panel and that element doing its own
-  // thing both happen, not one instead of the other.
+  // Any click outside the open panel just closes it — full stop.
+  // This used to also jump straight to a DIFFERENT card's notes panel
+  // if that click landed on its plain content (not a button/link), on
+  // the theory that it saved a step. In practice, clicking a
+  // neighboring card for any reason while a panel was open — even just
+  // to look at it, not to take notes on it — popped its own notes
+  // panel open unexpectedly, which is exactly the "clicking left or
+  // right opens those notes" complaint. A closed panel by default is
+  // the safer, more predictable behavior; opening a different one is
+  // still just one deliberate click away on that card's own notes
+  // button. Deliberately does NOT check whether the click landed on
+  // something interactive: dismissing the panel should never depend on
+  // what you happened to click, and the element's own click handler
+  // still runs completely normally afterward since nothing here calls
+  // stopPropagation or preventDefault — closing the panel and that
+  // element doing its own thing both happen, not one instead of the
+  // other.
   closeNotesPanel();
   render();
 });
